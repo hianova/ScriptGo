@@ -85,7 +85,7 @@ pub fn run() {
             #[cfg(debug_assertions)]
             {
                 let app_handle = app.handle();
-                std::thread::spawn(move || {
+                let _watcher_handle = std::thread::Builder::new().name("hot-reload-watcher".into()).spawn(move || {
                     let mut last_modified = std::fs::metadata("ui/index.html")
                         .and_then(|m| m.modified())
                         .unwrap_or(std::time::SystemTime::now());

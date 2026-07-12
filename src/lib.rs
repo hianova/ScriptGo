@@ -5,6 +5,7 @@ extern crate alloc;
 pub mod instruction;
 pub mod vm;
 pub mod assembler;
+pub mod sync;
 
 #[cfg(test)]
 extern crate std;

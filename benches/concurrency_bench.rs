@@ -1,35 +1,49 @@
-use arc_swap::ArcSwap;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use script_go::assembler::parse_asm;
-use script_go::instruction::Instruction;
+use script_go::instruction::{Instruction, OpCode};
 use script_go::vm::ScriptVm;
+use script_go::sync::SeqLock;
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::thread;
 
-/// A mock HFT Gateway demonstrating RCU hot-reloading
+#[derive(Clone, Copy)]
+struct Program {
+    code: [Instruction; 64],
+    len: usize,
+}
+
+impl Program {
+    fn from_vec(vec: Vec<Instruction>) -> Self {
+        let mut code = [Instruction::new(OpCode::Halt as u8, 0, 0, 0); 64];
+        let len = vec.len().min(64);
+        code[..len].copy_from_slice(&vec[..len]);
+        Self { code, len }
+    }
+}
+
+/// A mock HFT Gateway demonstrating SeqLock hot-reloading
 struct Gateway {
-    script: ArcSwap<Vec<Instruction>>,
+    script: SeqLock<Program>,
 }
 
 impl Gateway {
     pub fn new(source: &str) -> Self {
         let code = parse_asm(source).unwrap();
         Self {
-            script: ArcSwap::from_pointee(code),
+            script: SeqLock::new(Program::from_vec(code)),
         }
     }
 
     #[inline(always)]
     pub fn execute(&self) -> u32 {
-        // RCU fast path: Load the Arc pointer without locking
-        let code_guard = self.script.load();
+        let program = self.script.read();
         let mut vm = ScriptVm::new();
-        vm.run(&code_guard).unwrap()
+        vm.run(&program.code[..program.len]).unwrap()
     }
 
     pub fn hot_reload(&self, source: &str) {
         let new_code = parse_asm(source).unwrap();
-        self.script.store(Arc::new(new_code));
+        self.script.write(Program::from_vec(new_code));
     }
 }
 
@@ -50,29 +64,36 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
     // Spawn a writer thread that constantly hot-reloads the script 
     let writer_running = running.clone();
     let gw_writer = gateway.clone();
-    let writer_handle = thread::spawn(move || {
-        let mut toggle = false;
-        while writer_running.load(Ordering::Relaxed) {
-            let script = if toggle {
-                "LOADIMM 1 100\nSUB 2 1 1\nHALT"
-            } else {
-                "LOADIMM 1 50\nADD 2 1 1\nHALT"
-            };
-            gw_writer.hot_reload(script);
-            toggle = !toggle;
-        }
-    });
+    let writer_handle = thread::Builder::new()
+        .name("hot-reload-writer".to_string())
+        .spawn(move || {
+            let mut toggle = false;
+            while writer_running.load(Ordering::Relaxed) {
+                let script = if toggle {
+                    "LOADIMM 1 100\nSUB 2 1 1\nHALT"
+                } else {
+                    "LOADIMM 1 50\nADD 2 1 1\nHALT"
+                };
+                gw_writer.hot_reload(script);
+                toggle = !toggle;
+            }
+        })
+        .unwrap();
 
     // Spawn 8 background reader threads
     let mut reader_handles = vec![];
-    for _ in 0..8 {
+    for i in 0..8 {
         let reader_running = running.clone();
         let gw_reader = gateway.clone();
-        reader_handles.push(thread::spawn(move || {
-            while reader_running.load(Ordering::Relaxed) {
-                black_box(gw_reader.execute());
-            }
-        }));
+        let handle = thread::Builder::new()
+            .name(format!("hft-reader-{}", i))
+            .spawn(move || {
+                while reader_running.load(Ordering::Relaxed) {
+                    black_box(gw_reader.execute());
+                }
+            })
+            .unwrap();
+        reader_handles.push(handle);
     }
 
     group.bench_function("contended_hot_reload", |b| {

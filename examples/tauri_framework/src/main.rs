@@ -26,7 +26,7 @@ fn main() {
             let app_handle = app.handle();
             
             // Start the ScriptGo VM Engine in a background thread
-            thread::spawn(move || {
+            let _vm_handle = thread::Builder::new().name("scriptgo-vm".into()).spawn(move || {
                 // Wait for frontend to load
                 thread::sleep(Duration::from_millis(1500));
                 
