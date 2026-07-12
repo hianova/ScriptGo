@@ -1,41 +1,75 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Instant;
+use tauri::Manager;
+use window_vibrancy::{apply_vibrancy, apply_mica, NSVisualEffectMaterial};
 use script_go::assembler::parse_asm;
 use script_go::vm::ScriptVm;
 use std::fs;
 use pulldown_cmark::Parser;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Note {
+pub struct NotePayload {
     id: usize,
     title: String,
     content: String,
 }
 
+#[derive(Debug, Clone)]
+struct Note {
+    id: usize,
+    title: String,
+    content: String,
+    title_lower: String,
+    content_lower: String,
+}
+
+pub mod wasm_plugin;
+
 struct AppState {
-    notes: Vec<Note>,
+    vm: Mutex<ScriptVm>,
+    notes: Mutex<Vec<Note>>,
+    plugins: Mutex<HashMap<String, wasm_plugin::WasmPlugin>>,
 }
 
 #[tauri::command]
-fn search_notes(query: String, state: tauri::State<Mutex<AppState>>) -> Vec<Note> {
+fn render_plugin(name: String, state: tauri::State<AppState>) -> Result<String, String> {
+    let plugins = state.plugins.lock().unwrap();
+    if let Some(plugin) = plugins.get(&name) {
+        plugin.render().map_err(|e| e.to_string())
+    } else {
+        Err("Plugin not found".into())
+    }
+}
+
+#[tauri::command]
+fn search_notes(query: String, state: tauri::State<AppState>) -> Vec<NotePayload> {
     // 驗收關卡四：OTA 熱更新 (Zero-Downtime)
     let sgo_code = fs::read_to_string("logic.sgo").unwrap_or_else(|_| "HALT".to_string());
     if let Ok(instructions) = parse_asm(&sgo_code) {
-        let mut vm = ScriptVm::new();
+        let mut vm = state.vm.lock().unwrap();
         let _ = vm.run(&instructions);
     }
 
-    let state = state.lock().unwrap();
+    let notes = state.notes.lock().unwrap();
     let q = query.to_lowercase();
     
     if q.is_empty() {
-        return state.notes.clone();
+        return notes.iter().map(|n| NotePayload {
+            id: n.id,
+            title: n.title.clone(),
+            content: n.content.clone(),
+        }).collect();
     }
     
-    state.notes.iter()
-        .filter(|n| n.title.to_lowercase().contains(&q) || n.content.to_lowercase().contains(&q))
-        .cloned()
+    notes.iter()
+        .filter(|n| n.title_lower.contains(&q) || n.content_lower.contains(&q))
+        .map(|n| NotePayload {
+            id: n.id,
+            title: n.title.clone(),
+            content: n.content.clone(),
+        })
         .collect()
 }
 
@@ -56,25 +90,113 @@ fn fetch_mega_note() -> Vec<u8> {
     mega_doc.into_bytes()
 }
 
+#[tauri::command]
+fn parse_real_markdown(md: String) -> String {
+    let parser = Parser::new(&md);
+    let mut html_output = String::new();
+    pulldown_cmark::html::push_html(&mut html_output, parser);
+    html_output
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     println!("🚀 [ScriptGo] Generating 10,000 Markdown Notes in memory...");
     let start = Instant::now();
     let mut notes = Vec::with_capacity(10000);
     for i in 1..=10000 {
+        let title = format!("Markdown Note #{} - Performance Audit", i);
+        let content = format!("This is the auto-generated content for note {}.\n\n# Header\n- Rust backend\n- High Performance IPC\n- Virtual DOM scrolling\n\nScriptGo VM is processing this at ultra-low latency.", i);
         notes.push(Note {
             id: i,
-            title: format!("Markdown Note #{} - Performance Audit", i),
-            content: format!("This is the auto-generated content for note {}.\n\n# Header\n- Rust backend\n- High Performance IPC\n- Virtual DOM scrolling\n\nScriptGo VM is processing this at ultra-low latency.", i),
+            title_lower: title.to_lowercase(),
+            content_lower: content.to_lowercase(),
+            title,
+            content,
         });
     }
     println!("✅ Generated 10,000 notes in {:?}", start.elapsed());
 
-    let app_state = Mutex::new(AppState { notes });
+    let vm = ScriptVm::new();
+    let app_state = AppState {
+        vm: Mutex::new(vm),
+        notes: Mutex::new(notes),
+        plugins: Mutex::new(HashMap::new()),
+    };
 
     tauri::Builder::default()
         .manage(app_state)
-        .invoke_handler(tauri::generate_handler![search_notes, fetch_mega_note])
+        .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+            #[cfg(target_os = "macos")]
+            apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None).unwrap_or(());
+            
+            #[cfg(target_os = "windows")]
+            apply_mica(&window, None).unwrap_or(());
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![search_notes, fetch_mega_note, parse_real_markdown, render_plugin])
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                if let Some(path) = paths.first() {
+                    let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    if let Ok(bytes) = std::fs::read(path) {
+                        let start = std::time::Instant::now();
+                        
+                        if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
+                            // Wasm Plugin Loading
+                            if let Ok(plugin) = wasm_plugin::WasmPlugin::new(&bytes) {
+                                if let Ok(name) = plugin.get_name() {
+                                    let elapsed = start.elapsed().as_millis();
+                                    
+                                    // Store plugin
+                                    let state: tauri::State<AppState> = window.state();
+                                    state.plugins.lock().unwrap().insert(name.clone(), plugin);
+                                    
+                                    // Escape for Javascript
+                                    let name_js = serde_json::to_string(&name).unwrap();
+                                    let js = format!("
+                                        if (window.addWasmPlugin) window.addWasmPlugin({});
+                                        document.getElementById('perf-monitor').innerText = 'Loaded Wasm plugin in {}ms';
+                                    ", name_js, elapsed);
+                                    if let Some(webview) = window.get_webview_window("main") {
+                                        let _ = webview.eval(&js);
+                                    }
+                                }
+                            }
+                            return;
+                        }
+
+                        // Markdown parsing
+                        let text = match String::from_utf8(bytes.clone()) {
+                            Ok(s) => s,
+                            Err(_) => {
+                                let (cow, _, _) = encoding_rs::BIG5.decode(&bytes);
+                                cow.into_owned()
+                            }
+                        };
+                        
+                        let parser = pulldown_cmark::Parser::new(&text);
+                        let mut html = String::new();
+                        pulldown_cmark::html::push_html(&mut html, parser);
+                        let elapsed = start.elapsed().as_millis();
+                        
+                        // Use serde_json to safely escape strings for Javascript eval
+                        let html_js = serde_json::to_string(&html).unwrap_or_else(|_| "\"Error\"".to_string());
+                        let name_js = serde_json::to_string(&file_name).unwrap_or_else(|_| "\"File\"".to_string());
+                        let js = format!(
+                            "document.getElementById('note-title-display').innerText = {};
+                             document.getElementById('note-content-display').innerHTML = {};
+                             document.getElementById('perf-monitor').innerText = 'Rendered via Rust OS Drop in {}ms';",
+                            name_js, html_js, elapsed
+                        );
+                        if let Some(webview) = window.get_webview_window("main") {
+                            let _ = webview.eval(&js);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -87,7 +209,11 @@ mod tests {
     fn boss_3_memory_leak_test() {
         // Simulate TTFP (Time to First Paint data structure prep)
         let start = Instant::now();
-        let app_state = Mutex::new(AppState { notes: vec![] });
+        let app_state = AppState {
+            vm: Mutex::new(ScriptVm::new()),
+            notes: Mutex::new(vec![]),
+            plugins: Mutex::new(HashMap::new()),
+        };
         println!("✅ Boss 3 (TTFP): Backend structure ready in {:?}", start.elapsed());
         
         let mut mem_initial = 0;

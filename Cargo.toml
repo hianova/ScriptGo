@@ -6,6 +6,7 @@ edition = "2021"
 exclude = [".covopt/"]
 
 [dependencies]
+no_std_tool = { version = "1.0.0", path = "../no_std_tool" }
 
 [dev-dependencies]
 criterion = "0.5"

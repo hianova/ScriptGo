@@ -10,11 +10,19 @@
       {
         "title": "ScriptGo Markdown Notes",
         "width": 1024,
-        "height": 720
+        "height": 720,
+        "decorations": false,
+        "transparent": true,
+        "dragDropEnabled": false
       }
     ],
     "security": {
       "csp": null
     }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "dmg",
+    "icon": ["icons/icon.png"]
   }
 }
