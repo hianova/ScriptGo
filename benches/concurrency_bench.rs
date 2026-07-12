@@ -13,7 +13,7 @@ struct Gateway {
 
 impl Gateway {
     pub fn new(source: &str) -> Self {
-        let code = parse_asm(source);
+        let code = parse_asm(source).unwrap();
         Self {
             script: ArcSwap::from_pointee(code),
         }
@@ -24,11 +24,11 @@ impl Gateway {
         // RCU fast path: Load the Arc pointer without locking
         let code_guard = self.script.load();
         let mut vm = ScriptVm::new();
-        vm.run(&code_guard)
+        vm.run(&code_guard).unwrap()
     }
 
     pub fn hot_reload(&self, source: &str) {
-        let new_code = parse_asm(source);
+        let new_code = parse_asm(source).unwrap();
         self.script.store(Arc::new(new_code));
     }
 }

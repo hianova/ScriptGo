@@ -28,10 +28,11 @@ pub enum OpCode {
 
     PrintReg = 0x50, // System call: Print R[A]
     
+    UiCall = 0xFE,   // UI System Call: Command=A, Arg1=B, Arg2=C
     NeuralCall = 0xFF,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct Instruction(pub u32);
 

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ScriptGo Notes</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, sans-serif; background: #121212; color: #eee; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
+    #sidebar { width: 300px; border-right: 1px solid #333; display: flex; flex-direction: column; background: #1a1a1a; }
+    #search-box { padding: 15px; border-bottom: 1px solid #333; }
+    #search-input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; font-size: 14px; }
+    #list-container { flex: 1; overflow-y: auto; position: relative; }
+    #scroll-spacer { width: 100%; }
+    #render-window { position: absolute; top: 0; left: 0; width: 100%; }
+    .note-item { height: 60px; padding: 10px 15px; border-bottom: 1px solid #2a2a2a; cursor: pointer; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+    .note-item:hover { background: #2a2a2a; }
+    .note-item.active { background: #0056b3; }
+    .note-title { font-weight: bold; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .note-preview { font-size: 12px; color: #aaa; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; margin-top: 4px; }
+    
+    #main-content { flex: 1; padding: 20px; display: flex; flex-direction: column; background: #121212; }
+    #note-title-display { font-size: 24px; font-weight: bold; margin-bottom: 15px; }
+    #note-content-display { flex: 1; white-space: pre-wrap; font-size: 15px; line-height: 1.6; color: #ddd; overflow-y: auto; }
+    #perf-monitor { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 4px; font-size: 12px; color: #0f0; }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <div id="search-box">
+      <input type="text" id="search-input" placeholder="Search 10,000 notes...">
+    </div>
+    <div id="list-container">
+      <div id="scroll-spacer"></div>
+      <div id="render-window"></div>
+    </div>
+  </div>
+  <div id="main-content">
+    <div id="note-title-display">Select a note</div>
+    <div id="note-content-display">Content will appear here...</div>
+  </div>
+  <div id="perf-monitor">Wait: 0ms | IPC: 0ms</div>
+
+  <script>
+    const { invoke } = window.__TAURI__.tauri;
+    
+    let allNotes = [];
+    const ITEM_HEIGHT = 60;
+    const listContainer = document.getElementById('list-container');
+    const scrollSpacer = document.getElementById('scroll-spacer');
+    const renderWindow = document.getElementById('render-window');
+    
+    // Virtual Scroll Implementation
+    function renderList() {
+      const scrollTop = listContainer.scrollTop;
+      const containerHeight = listContainer.clientHeight;
+      
+      const startIndex = Math.floor(scrollTop / ITEM_HEIGHT);
+      const endIndex = Math.min(allNotes.length, Math.ceil((scrollTop + containerHeight) / ITEM_HEIGHT) + 2); // Buffer of 2
+      
+      const offsetY = startIndex * ITEM_HEIGHT;
+      renderWindow.style.transform = `translateY(${offsetY}px)`;
+      
+      let html = '';
+      for (let i = startIndex; i < endIndex; i++) {
+        const note = allNotes[i];
+        if (!note) continue;
+        html += `
+          <div class="note-item" onclick="selectNote(${note.id}, \`${escapeHtml(note.title)}\`, \`${escapeHtml(note.content)}\`)">
+            <div class="note-title">${escapeHtml(note.title)}</div>
+            <div class="note-preview">${escapeHtml(note.content.substring(0, 50))}...</div>
+          </div>
+        `;
+      }
+      renderWindow.innerHTML = html;
+    }
+    
+    listContainer.addEventListener('scroll', renderList);
+    
+    window.selectNote = function(id, title, content) {
+      document.getElementById('note-title-display').innerText = title;
+      document.getElementById('note-content-display').innerText = content;
+    };
+    
+    function escapeHtml(unsafe) {
+      if (!unsafe) return "";
+      return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;").replace(/`/g, "\\`");
+    }
+
+    let searchTimeout = null;
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      const q = e.target.value;
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        performSearch(q);
+      }, 100);
+    });
+
+    async function performSearch(query) {
+      const start = performance.now();
+      try {
+        allNotes = await invoke('search_notes', { query: query });
+        const end = performance.now();
+        document.getElementById('perf-monitor').innerText = `Results: ${allNotes.length} | IPC: ${(end - start).toFixed(2)}ms`;
+        
+        scrollSpacer.style.height = `${allNotes.length * ITEM_HEIGHT}px`;
+        listContainer.scrollTop = 0;
+        renderList();
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
+    // Initial Load
+    setTimeout(() => performSearch(""), 100);
+  </script>
+</body>
+</html>

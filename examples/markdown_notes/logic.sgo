@@ -1,0 +1,8 @@
+# ScriptGo OTA Hot Reload Logic Script
+# 每次搜尋時都會被後端瞬間解析並執行 (耗時小於 1μs)
+# 這裡可以放置動態過濾規則或是紀錄狀態
+LOADIMM 1 200
+LOADIMM 2 200
+SUB 3 1 2     # R[3] = R[1] - R[2] (0)
+JMPIFZERO 3 5 # 若 R[3] == 0 跳轉到 HALT
+HALT

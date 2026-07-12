@@ -1,11 +1,17 @@
 use alloc::vec::Vec;
 use crate::instruction::{Instruction, OpCode};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AsmError {
+    InvalidMnemonic { line: usize },
+}
+
 /// Parses a string of assembly instructions into a Vec<Instruction>
-pub fn parse_asm(source: &str) -> Vec<Instruction> {
+pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
     let mut code = Vec::new();
     
-    for line in source.lines() {
+    for (line_idx, line) in source.lines().enumerate() {
+        let line_num = line_idx + 1;
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -63,10 +69,38 @@ pub fn parse_asm(source: &str) -> Vec<Instruction> {
             },
             "RET" => Instruction::new(OpCode::Ret as u8, 0, 0, 0),
 
-            _ => Instruction::new(OpCode::Halt as u8, 0, 0, 0),
+            "PRINTREG" => Instruction::new(OpCode::PrintReg as u8, u8_p1, 0, 0),
+            "UICALL" => Instruction::new(OpCode::UiCall as u8, u8_p1, u8_p2, u8_p3),
+            "NEURALCALL" => Instruction::new(OpCode::NeuralCall as u8, u8_p1, u8_p2, u8_p3),
+
+            _ => return Err(AsmError::InvalidMnemonic { line: line_num }),
         };
         code.push(inst);
     }
     
-    code
+    Ok(code)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_parse() {
+        let source = "LOADIMM 1 5\nADD 2 1 1\nPRINTREG 2\nHALT";
+        let result = parse_asm(source);
+        assert!(result.is_ok());
+        let code = result.unwrap();
+        assert_eq!(code.len(), 4);
+        assert_eq!(code[0].opcode(), OpCode::LoadImm as u8);
+        assert_eq!(code[2].opcode(), OpCode::PrintReg as u8);
+    }
+
+    #[test]
+    fn test_invalid_parse() {
+        let source = "LOADIMM 1 5\nINVALID_OP 2 1 1\nHALT";
+        let result = parse_asm(source);
+        assert_eq!(result, Err(AsmError::InvalidMnemonic { line: 2 }));
+    }
+}
+

@@ -39,11 +39,12 @@ fn main() {
         HALT
     "#;
 
-    let code = parse_asm(source_code);
+    let code = parse_asm(source_code).unwrap();
     
     let mut vm = ScriptVm::new();
+    vm.print_handler = Some(|val| println!("🖨️ [PRINTREG]: {}", val));
     let start = Instant::now();
-    let steps = vm.run(&code);
+    let steps = vm.run(&code).unwrap();
     let duration = start.elapsed();
 
     println!("✅ Execution Finished!");
