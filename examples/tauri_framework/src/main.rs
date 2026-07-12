@@ -4,6 +4,8 @@ use script_go::assembler::parse_asm;
 use script_go::vm::ScriptVm;
 use serde::Serialize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use tauri::Manager;
@@ -20,15 +22,36 @@ struct AlertPayload {
     msg: String,
 }
 
+struct AppState {
+    abort_flag: Arc<AtomicBool>,
+    vm_thread: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
 fn main() {
-    tauri::Builder::default()
-        .setup(|app| {
+    let abort_flag = Arc::new(AtomicBool::new(false));
+    let app_state = Arc::new(AppState {
+        abort_flag: abort_flag.clone(),
+        vm_thread: Mutex::new(None),
+    });
+
+    let app = tauri::Builder::default()
+        .manage(app_state.clone())
+        .setup(move |app| {
             let app_handle = app.handle();
+            let abort_clone = abort_flag.clone();
             
             // Start the ScriptGo VM Engine in a background thread
-            let _vm_handle = thread::Builder::new().name("scriptgo-vm".into()).spawn(move || {
+            let vm_handle = thread::Builder::new().name("scriptgo-vm".into()).spawn(move || {
+                no_std_tool::debug::track_thread_spawn();
+                
                 // Wait for frontend to load
-                thread::sleep(Duration::from_millis(1500));
+                for _ in 0..15 {
+                    if abort_clone.load(Ordering::Relaxed) {
+                        no_std_tool::debug::track_thread_exit();
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(100));
+                }
                 
                 let source_code = r#"
                     # Create Root View (ID=10, Type=1)
@@ -68,6 +91,7 @@ fn main() {
                 let code = parse_asm(source_code).expect("Failed to parse script");
                 
                 let mut vm = ScriptVm::new();
+                vm.abort_flag = Some(abort_clone.clone());
                 
                 // Bind the UI Handler to emit Tauri IPC events
                 let handle = app_handle.clone();
@@ -83,10 +107,27 @@ fn main() {
                 } else {
                     println!("✅ ScriptGo Execution Finished.");
                 }
-            });
+                
+                no_std_tool::debug::track_thread_exit();
+            }).unwrap();
             
+            *app_state.vm_thread.lock().unwrap() = Some(vm_handle);
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(move |app_handle, event| {
+        if let tauri::RunEvent::ExitRequested { .. } = event {
+            println!("🛑 Signal scriptgo-vm thread to exit...");
+            let run_state = app_handle.state::<Arc<AppState>>();
+            run_state.abort_flag.store(true, Ordering::SeqCst);
+            let mut thread_guard = run_state.vm_thread.lock().unwrap();
+            if let Some(handle) = thread_guard.take() {
+                println!("⏳ Joining scriptgo-vm thread...");
+                let _ = handle.join();
+                println!("✅ scriptgo-vm thread joined cleanly.");
+            }
+        }
+    });
 }

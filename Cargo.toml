@@ -26,3 +26,6 @@ members = [
     "tools/create-scriptgo-app",
     "examples/markdown_notes"
 ]
+exclude = [
+    "examples/tauri_framework"
+]

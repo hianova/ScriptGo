@@ -45,6 +45,11 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
             "MUL" => Instruction::new(OpCode::Mul as u8, u8_p1, u8_p2, u8_p3),
             "DIV" => Instruction::new(OpCode::Div as u8, u8_p1, u8_p2, u8_p3),
             "MOD" => Instruction::new(OpCode::Mod as u8, u8_p1, u8_p2, u8_p3),
+
+            "FADD" => Instruction::new(OpCode::FAdd as u8, u8_p1, u8_p2, u8_p3),
+            "FSUB" => Instruction::new(OpCode::FSub as u8, u8_p1, u8_p2, u8_p3),
+            "FMUL" => Instruction::new(OpCode::FMul as u8, u8_p1, u8_p2, u8_p3),
+            "FDIV" => Instruction::new(OpCode::FDiv as u8, u8_p1, u8_p2, u8_p3),
             
             "AND" => Instruction::new(OpCode::And as u8, u8_p1, u8_p2, u8_p3),
             "OR"  => Instruction::new(OpCode::Or as u8, u8_p1, u8_p2, u8_p3),
@@ -61,6 +66,8 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
             "JMPIFEQ" => Instruction::new(OpCode::JmpIfEq as u8, u8_p1, u8_p2, u8_p3),
             "JMPIFLT" => Instruction::new(OpCode::JmpIfLt as u8, u8_p1, u8_p2, u8_p3),
             "JMPIFGT" => Instruction::new(OpCode::JmpIfGt as u8, u8_p1, u8_p2, u8_p3),
+            "JMPIFFLT" => Instruction::new(OpCode::JmpIfFLt as u8, u8_p1, u8_p2, u8_p3),
+            "JMPIFFGT" => Instruction::new(OpCode::JmpIfFGt as u8, u8_p1, u8_p2, u8_p3),
 
             "CALL" => {
                 let c_low = (p1 & 0xFF) as u8;
@@ -70,6 +77,14 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
             "RET" => Instruction::new(OpCode::Ret as u8, 0, 0, 0),
 
             "PRINTREG" => Instruction::new(OpCode::PrintReg as u8, u8_p1, 0, 0),
+            
+            "LOAD" => Instruction::new(OpCode::Load as u8, u8_p1, u8_p2, u8_p3),
+            "STORE" => Instruction::new(OpCode::Store as u8, u8_p1, u8_p2, u8_p3),
+
+            "EXP" => Instruction::new(OpCode::Exp as u8, u8_p1, u8_p2, 0),
+            "RSQRT" => Instruction::new(OpCode::Rsqrt as u8, u8_p1, u8_p2, 0),
+            "SILU" => Instruction::new(OpCode::Silu as u8, u8_p1, u8_p2, 0),
+
             "UICALL" => Instruction::new(OpCode::UiCall as u8, u8_p1, u8_p2, u8_p3),
             "NEURALCALL" => Instruction::new(OpCode::NeuralCall as u8, u8_p1, u8_p2, u8_p3),
 

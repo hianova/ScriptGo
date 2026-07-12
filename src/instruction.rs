@@ -10,6 +10,10 @@ pub enum OpCode {
     Mul = 0x12,      // R[A] = R[B] * R[C]
     Div = 0x13,      // R[A] = R[B] / R[C]
     Mod = 0x14,      // R[A] = R[B] % R[C]
+    FAdd = 0x15,     // R[A] = R[B] + R[C] as f32
+    FSub = 0x16,     // R[A] = R[B] - R[C] as f32
+    FMul = 0x17,     // R[A] = R[B] * R[C] as f32
+    FDiv = 0x18,     // R[A] = R[B] / R[C] as f32
     
     And = 0x20,      // R[A] = R[B] & R[C]
     Or = 0x21,       // R[A] = R[B] | R[C]
@@ -22,11 +26,20 @@ pub enum OpCode {
     JmpIfEq = 0x32,  // If R[A] == R[B], PC = C
     JmpIfLt = 0x33,  // If R[A] < R[B], PC = C
     JmpIfGt = 0x34,  // If R[A] > R[B], PC = C
+    JmpIfFLt = 0x35, // If R[A] < R[B] as f32, PC = C
+    JmpIfFGt = 0x36, // If R[A] > R[B] as f32, PC = C
 
     Call = 0x40,     // Push PC to stack, PC = imm16
     Ret = 0x41,      // Pop PC from stack
 
     PrintReg = 0x50, // System call: Print R[A]
+
+    Load = 0x60,     // R[A] = Memory[R[B] + R[C]]
+    Store = 0x61,    // Memory[R[B] + R[C]] = R[A]
+
+    Exp = 0x70,      // R[A] = exp_approx_q16(R[B])
+    Rsqrt = 0x71,    // R[A] = rsqrt_approx_i32(R[B])
+    Silu = 0x72,     // R[A] = silu_approx_i8(R[B])
     
     UiCall = 0xFE,   // UI System Call: Command=A, Arg1=B, Arg2=C
     NeuralCall = 0xFF,

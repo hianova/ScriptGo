@@ -67,6 +67,7 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
     let writer_handle = thread::Builder::new()
         .name("hot-reload-writer".to_string())
         .spawn(move || {
+            no_std_tool::debug::track_thread_spawn();
             let mut toggle = false;
             while writer_running.load(Ordering::Relaxed) {
                 let script = if toggle {
@@ -77,6 +78,7 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
                 gw_writer.hot_reload(script);
                 toggle = !toggle;
             }
+            no_std_tool::debug::track_thread_exit();
         })
         .unwrap();
 
@@ -88,9 +90,11 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
         let handle = thread::Builder::new()
             .name(format!("hft-reader-{}", i))
             .spawn(move || {
+                no_std_tool::debug::track_thread_spawn();
                 while reader_running.load(Ordering::Relaxed) {
                     black_box(gw_reader.execute());
                 }
+                no_std_tool::debug::track_thread_exit();
             })
             .unwrap();
         reader_handles.push(handle);
@@ -108,6 +112,8 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
     for h in reader_handles {
         h.join().unwrap();
     }
+
+    assert!(no_std_tool::debug::check_thread_drops(), "All benchmark threads should be cleanly dropped.");
 
     group.finish();
 }

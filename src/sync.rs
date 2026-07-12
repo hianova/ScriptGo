@@ -1,7 +1,7 @@
-use core::sync::atomic::{AtomicUsize, Ordering, compiler_fence};
+use core::sync::atomic::{AtomicUsize, Ordering, fence};
 use core::hint::spin_loop;
 use core::cell::UnsafeCell;
-use no_std_tool::sync::SpinMutex;
+use no_std_tool::sync::{SpinMutex, Backoff};
 
 /// A simple Sequence Lock for Wait-Free Readers.
 /// Requires the protected data to be `Copy`.
@@ -37,7 +37,7 @@ impl<T: Copy> SeqLock<T> {
                 continue;
             }
 
-            compiler_fence(Ordering::Acquire);
+            fence(Ordering::Acquire);
 
             // SAFETY: Data race is possible here, but since T is Copy, 
             // and we validate the sequence number afterwards, any torn or 
@@ -46,7 +46,7 @@ impl<T: Copy> SeqLock<T> {
             let data = unsafe { core::ptr::read_volatile(self.data.get()) };
 
             // Ensure the reads are not reordered after the second sequence check
-            compiler_fence(Ordering::Acquire);
+            fence(Ordering::Acquire);
 
             let seq2 = self.seq.load(Ordering::Acquire);
             
@@ -59,8 +59,16 @@ impl<T: Copy> SeqLock<T> {
 
     /// Exclusively write the data.
     pub fn write(&self, new_data: T) {
-        // Serialize multiple writers using no_std_tool's SpinMutex
-        let _guard = self.writer_lock.lock().unwrap();
+        // Serialize multiple writers using no_std_tool's SpinMutex and Backoff retry loop
+        let mut backoff = Backoff::new();
+        let _guard = loop {
+            match self.writer_lock.lock() {
+                Ok(guard) => break guard,
+                Err(_) => {
+                    backoff.snooze();
+                }
+            }
+        };
 
         let seq = self.seq.load(Ordering::Relaxed);
         
@@ -68,7 +76,7 @@ impl<T: Copy> SeqLock<T> {
         self.seq.store(seq.wrapping_add(1), Ordering::Release);
 
         // Ensure the sequence is visible before data write
-        compiler_fence(Ordering::Release);
+        fence(Ordering::Release);
 
         // SAFETY: We hold the writer lock, so we have exclusive write access.
         unsafe {
@@ -76,7 +84,7 @@ impl<T: Copy> SeqLock<T> {
         }
 
         // Ensure data write is visible before sequence update
-        compiler_fence(Ordering::Release);
+        fence(Ordering::Release);
 
         // Increment sequence to even (stable state)
         self.seq.store(seq.wrapping_add(2), Ordering::Release);
