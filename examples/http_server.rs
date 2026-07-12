@@ -12,7 +12,7 @@ struct HttpGateway {
 
 impl HttpGateway {
     pub fn new(source: &str) -> Self {
-        let code = parse_asm(source);
+        let code = parse_asm(source).unwrap();
         Self {
             script: ArcSwap::from_pointee(code),
         }
@@ -23,7 +23,7 @@ impl HttpGateway {
         let code = self.script.load();
         let mut vm = ScriptVm::new();
         // In reality, map HTTP payload/headers to registers here
-        vm.run(&code);
+        let _ = vm.run(&code);
         vm.registers[1] // Return some calculated result
     }
 }

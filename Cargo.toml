@@ -19,3 +19,9 @@ harness = false
 [[bench]]
 name = "concurrency_bench"
 harness = false
+
+[workspace]
+members = [
+    "tools/create-scriptgo-app",
+    "examples/markdown_notes"
+]

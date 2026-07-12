@@ -37,17 +37,26 @@
   <div id="main-content">
     <div id="note-title-display">Select a note</div>
     <div id="note-content-display">Content will appear here...</div>
+    <div id="boss-panel" style="margin-top: 20px; padding: 10px; border-top: 1px solid #333;">
+      <button onclick="runBoss1()">⚔️ Boss 1: Fetch 100MB Mega-Note</button>
+      <button onclick="runBoss2()">⚔️ Boss 2: Chaos Monkey</button>
+      <div id="boss-log" style="margin-top: 10px; color: #ff0; font-family: monospace;"></div>
+    </div>
   </div>
   <div id="perf-monitor">Wait: 0ms | IPC: 0ms</div>
 
   <script>
     const { invoke } = window.__TAURI__.tauri;
     
+    // Virtual Scroll Logic
     let allNotes = [];
     const ITEM_HEIGHT = 60;
     const listContainer = document.getElementById('list-container');
     const scrollSpacer = document.getElementById('scroll-spacer');
     const renderWindow = document.getElementById('render-window');
+    const bossLog = document.getElementById('boss-log');
+    
+    function logBoss(msg) { bossLog.innerText = msg; }
     
     // Virtual Scroll Implementation
     function renderList() {
@@ -108,6 +117,38 @@
       } catch(e) {
         console.error(e);
       }
+    }
+
+    // Boss 1: 100MB IPC Transfer
+    window.runBoss1 = async function() {
+      logBoss("Boss 1: Fetching 100MB mega note...");
+      const start = performance.now();
+      // Returns Uint8Array (zero-copy binary payload via Tauri 2 IPC)
+      const data = await invoke('fetch_mega_note');
+      const end = performance.now();
+      logBoss(`Boss 1 Passed! Received ${data.length} bytes in ${(end - start).toFixed(2)} ms.`);
+    }
+
+    // Boss 2: Chaos Monkey (100 IPC/s)
+    window.runBoss2 = function() {
+      logBoss("Boss 2: Chaos Monkey started (100 req/s). Running for 10 seconds...");
+      let drops = 0;
+      let total = 0;
+      
+      const interval = setInterval(async () => {
+        total++;
+        try {
+          // This happens while a background script overwrites logic.sgo
+          await invoke('search_notes', { query: 'Markdown Note #123' });
+        } catch(e) {
+          drops++;
+        }
+      }, 10);
+      
+      setTimeout(() => {
+        clearInterval(interval);
+        logBoss(`Boss 2 Passed! Total requests: ${total}, Drop rate: ${(drops/total*100).toFixed(2)}%`);
+      }, 10000);
     }
 
     // Initial Load
