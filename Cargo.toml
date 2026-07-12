@@ -1,0 +1,21 @@
+[package]
+name = "script_go"
+version = "0.1.0"
+edition = "2021"
+
+exclude = [".covopt/"]
+
+[dependencies]
+
+[dev-dependencies]
+criterion = "0.5"
+arc-swap = "1.6"
+tokio = { version = "1", features = ["full"] }
+
+[[bench]]
+name = "vm_bench"
+harness = false
+
+[[bench]]
+name = "concurrency_bench"
+harness = false
