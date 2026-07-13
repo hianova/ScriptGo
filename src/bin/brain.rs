@@ -83,7 +83,7 @@ pub fn main() -> std::io::Result<()> {
             socket.send_to(&force_bytes, blender_addr)?;
             
             // Print occasionally to avoid spamming the console
-            if state.frame % 10 == 0 {
+            if state.frame.is_multiple_of(10) {
                 println!("[OODA Loop] Frame: {:04} | Pos: ({:5.2}, {:5.2}, {:5.2}) | Action: Force({:5.2}, {:5.2}, {:5.2})",
                     state.frame, state.x, state.y, state.z, force.fx, force.fy, force.fz);
             }

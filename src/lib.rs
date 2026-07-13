@@ -22,6 +22,7 @@ mod covopt_tests {
         let n: u32 = n_str.parse().unwrap();
         
         let mut vm = vm::ScriptVm::new();
+        vm.tracing_enabled = true;
         vm.registers[1] = n; // Loop counter
         vm.registers[2] = 1; // Constant 1
         

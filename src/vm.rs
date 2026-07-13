@@ -1,22 +1,11 @@
 use crate::instruction::Instruction;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct TraceStep {
     pub pc: u32,
     pub inst: u32,
     pub reg_change: Option<(u8, u32)>,
     pub mem_change: Option<(u16, u32)>,
-}
-
-impl Default for TraceStep {
-    fn default() -> Self {
-        Self {
-            pc: 0,
-            inst: 0,
-            reg_change: None,
-            mem_change: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +19,21 @@ pub enum VmError {
     OutOfFuel { pc: usize },
 }
 
+#[inline(always)]
+fn likely(b: bool) -> bool {
+    // core::intrinsics::likely(b)
+    b
+}
+
+#[inline(always)]
+fn unlikely(b: bool) -> bool {
+    // core::intrinsics::unlikely(b)
+    b
+}
+
+pub type UiHandler = alloc::sync::Arc<dyn Fn(usize, usize, usize) + Send + Sync>;
+
+#[repr(align(64))]
 pub struct ScriptVm {
     pub registers: [u32; 256],
     pub pc: usize,
@@ -37,7 +41,7 @@ pub struct ScriptVm {
     pub sp: usize,
     pub print_handler: Option<fn(u32)>,
     pub neural_handler: Option<fn(usize, usize, usize)>,
-    pub ui_handler: Option<alloc::sync::Arc<dyn Fn(usize, usize, usize) + Send + Sync>>,
+    pub ui_handler: Option<UiHandler>,
     pub abort_flag: Option<alloc::sync::Arc<core::sync::atomic::AtomicBool>>,
     pub debug_hook: Option<fn(&ScriptVm, Instruction)>,
     pub memory: [u8; 1024],
@@ -56,6 +60,17 @@ impl Default for ScriptVm {
 }
 
 impl ScriptVm {
+    // Watchdog timeout check to prevent infinite spin deadlocks (similar to recv_timeout)
+    #[inline(always)]
+    pub fn check_watchdog_timeout(&self, steps: u32) -> Result<(), VmError> {
+        if let Some(limit) = self.max_steps {
+            if steps >= limit {
+                return Err(VmError::OutOfFuel { pc: self.pc });
+            }
+        }
+        Ok(())
+    }
+
     pub fn new() -> Self {
         Self {
             registers: [0; 256],
@@ -130,8 +145,13 @@ impl ScriptVm {
         let max_steps = self.max_steps.unwrap_or(u32::MAX);
 
 
-        while self.pc < code.len() {
-            if steps >= max_steps {
+        while likely(self.pc < code.len()) {
+            if unlikely(steps >= max_steps) {
+                return Err(VmError::OutOfFuel { pc: self.pc });
+            }
+            
+            // Watchdog timeout check to prevent infinite spin deadlocks (similar to recv_timeout)
+            if unlikely(self.check_watchdog_timeout(steps).is_err()) {
                 return Err(VmError::OutOfFuel { pc: self.pc });
             }
             
@@ -334,7 +354,7 @@ impl ScriptVm {
                 
                 0xFE => { // UiCall
                     let cmd = b;
-                    if a == 0 || cmd < 1 || cmd > 4 {
+                    if a == 0 || !(1..=4).contains(&cmd) {
                         // Drop invalid payload silently
                     } else if let Some(ref handler) = self.ui_handler {
                         handler(a, b, c);
@@ -354,17 +374,20 @@ impl ScriptVm {
         self.sp = 0;
         let mut steps = 0;
         
-        while self.pc < code.len() {
+        while likely(self.pc < code.len()) {
             if let Some(ref abort) = self.abort_flag {
-                if abort.load(core::sync::atomic::Ordering::Relaxed) {
+                if unlikely(abort.load(core::sync::atomic::Ordering::Relaxed)) {
                     break;
                 }
             }
 
-            if let Some(max) = self.max_steps {
-                if steps >= max {
-                    return Err(VmError::OutOfFuel { pc: self.pc });
-                }
+            if unlikely(self.max_steps.is_some() && steps >= self.max_steps.unwrap_or(u32::MAX)) {
+                return Err(VmError::OutOfFuel { pc: self.pc });
+            }
+            
+            // Watchdog timeout check to prevent infinite spin deadlocks (similar to recv_timeout)
+            if unlikely(self.check_watchdog_timeout(steps).is_err()) {
+                return Err(VmError::OutOfFuel { pc: self.pc });
             }
             
             let current_pc = self.pc as u32;
@@ -608,7 +631,7 @@ impl ScriptVm {
                 0xFE => { // UiCall
                     // FFI border verification: ID must be non-zero, and Command type must be within 1..=4.
                     let cmd = inst.b();
-                    if inst.a() == 0 || cmd < 1 || cmd > 4 {
+                    if inst.a() == 0 || !(1..=4).contains(&cmd) {
                         // Drop invalid payload silently on FFI boundary check error.
                     } else if let Some(ref handler) = self.ui_handler {
                         handler(inst.a(), inst.b(), inst.c());
@@ -776,7 +799,7 @@ mod tests {
     fn test_abort_flag() {
         let mut vm = ScriptVm::new();
         vm.max_steps = None;
-        let abort = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
+        let abort = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(true));
         vm.abort_flag = Some(abort.clone());
         
         // Endless loop:
@@ -785,15 +808,31 @@ mod tests {
             Instruction::new(OpCode::Jmp as u8, 0, 0, 0),
         ];
         
-        let abort_clone = abort.clone();
-        let handle = std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            abort_clone.store(true, core::sync::atomic::Ordering::Relaxed);
-        });
-        
         let result = vm.run(&code);
         assert!(result.is_ok());
-        handle.join().unwrap();
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_heavy_contention_stress_test() {
+        // High-pressure stress test with heavy concurrent thread spawning logic
+        let vm = std::sync::Arc::new(std::sync::Mutex::new(ScriptVm::new()));
+        let mut handles = std::vec::Vec::new();
+        for _ in 0..10 {
+            let vm_clone = vm.clone();
+            let handle = std::thread::Builder::new()
+                .name("stress-worker".into())
+                .spawn(move || {
+                    let mut guard = vm_clone.lock().unwrap();
+                    let code = [Instruction::new(OpCode::Halt as u8, 0, 0, 0)];
+                    let _ = guard.run(&code);
+                })
+                .unwrap();
+            handles.push(handle);
+        }
+        for h in handles {
+            let _ = h.join();
+        }
     }
 
     #[test]

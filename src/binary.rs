@@ -27,9 +27,7 @@ pub fn serialize_sgb(code: &[Instruction], max_fuel: u16, data_segment: &[u8]) -
     
     // Padding to 4-byte boundary
     let padding = (4 - (data_segment.len() % 4)) % 4;
-    for _ in 0..padding {
-        out.push(0);
-    }
+    out.resize(out.len() + padding, 0);
     
     // Code Segment
     for inst in code {
