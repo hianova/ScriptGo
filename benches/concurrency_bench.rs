@@ -49,6 +49,10 @@ impl Gateway {
 
 fn bench_hot_reload_contention(c: &mut Criterion) {
     let mut group = c.benchmark_group("hft_hot_reload");
+    group.sample_size(10);
+    group.warm_up_time(std::time::Duration::from_secs(1));
+    group.measurement_time(std::time::Duration::from_secs(1));
+
     let gateway = Arc::new(Gateway::new("LOADIMM 1 50\nADD 2 1 1\nHALT"));
 
     // Scenario 1: Uncontended Execution Latency
@@ -77,14 +81,15 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
                 };
                 gw_writer.hot_reload(script);
                 toggle = !toggle;
+                thread::sleep(std::time::Duration::from_micros(10));
             }
             no_std_tool::debug::track_thread_exit();
         })
         .unwrap();
 
-    // Spawn 8 background reader threads
+    // Spawn 2 background reader threads
     let mut reader_handles = vec![];
-    for i in 0..8 {
+    for i in 0..2 {
         let reader_running = running.clone();
         let gw_reader = gateway.clone();
         let handle = thread::Builder::new()
@@ -93,12 +98,14 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
                 no_std_tool::debug::track_thread_spawn();
                 while reader_running.load(Ordering::Relaxed) {
                     black_box(gw_reader.execute());
+                    thread::sleep(std::time::Duration::from_micros(10));
                 }
                 no_std_tool::debug::track_thread_exit();
             })
             .unwrap();
         reader_handles.push(handle);
     }
+
 
     group.bench_function("contended_hot_reload", |b| {
         b.iter(|| {

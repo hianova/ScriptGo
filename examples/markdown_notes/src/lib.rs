@@ -5,7 +5,7 @@ use std::time::Instant;
 use tauri::Manager;
 use window_vibrancy::{apply_vibrancy, apply_mica, NSVisualEffectMaterial};
 use script_go::assembler::parse_asm;
-use script_go::vm::ScriptVm;
+use script_go::vm::{ScriptVm, TraceStep};
 use std::fs;
 use pulldown_cmark::Parser;
 
@@ -43,13 +43,90 @@ fn render_plugin(name: String, state: tauri::State<AppState>) -> Result<String, 
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DevToolsStatePayload {
+    pub registers: Vec<u32>,
+    pub pc: usize,
+    pub memory: Vec<u8>,
+    pub trace: Vec<TraceStep>,
+}
+
+#[tauri::command]
+fn get_vm_devtools_state(state: tauri::State<AppState>) -> DevToolsStatePayload {
+    let vm = state.vm.lock().unwrap();
+    let mut trace_vec = Vec::with_capacity(vm.trace_count);
+    let mut idx = (vm.trace_head + 1024 - vm.trace_count) % 1024;
+    for _ in 0..vm.trace_count {
+        trace_vec.push(vm.trace_buffer[idx]);
+        idx = (idx + 1) % 1024;
+    }
+    DevToolsStatePayload {
+        registers: vm.registers.to_vec(),
+        pc: vm.pc,
+        memory: vm.memory.to_vec(),
+        trace: trace_vec,
+    }
+}
+
+#[tauri::command]
+fn export_vm_trace(state: tauri::State<AppState>) -> Result<String, String> {
+    let vm = state.vm.lock().unwrap();
+    let mut trace_vec = Vec::with_capacity(vm.trace_count);
+    let mut idx = (vm.trace_head + 1024 - vm.trace_count) % 1024;
+    for _ in 0..vm.trace_count {
+        trace_vec.push(vm.trace_buffer[idx]);
+        idx = (idx + 1) % 1024;
+    }
+    let json = serde_json::to_string_pretty(&trace_vec)
+        .map_err(|e| e.to_string())?;
+    std::fs::write("logic_trace.trace", &json)
+        .map_err(|e| e.to_string())?;
+    Ok("Saved to logic_trace.trace".into())
+}
+
+#[tauri::command]
+fn open_devtools(app_handle: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app_handle.get_webview_window("devtools") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    } else {
+        tauri::WebviewWindowBuilder::new(
+            &app_handle,
+            "devtools",
+            tauri::WebviewUrl::App("devtools.html".into())
+        )
+        .title("ScriptGo DevTools")
+        .inner_size(800.0, 600.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn search_notes(query: String, state: tauri::State<AppState>) -> Vec<NotePayload> {
     // 驗收關卡四：OTA 熱更新 (Zero-Downtime)
     let sgo_code = fs::read_to_string("logic.sgo").unwrap_or_else(|_| "HALT".to_string());
     if let Ok(instructions) = parse_asm(&sgo_code) {
         let mut vm = state.vm.lock().unwrap();
-        let _ = vm.run(&instructions);
+        vm.tracing_enabled = true; // Enable trace logging so we can inspect it in DevTools
+
+        // Wrap execution in catch_unwind to handle any potential panic inside custom hooks or VM
+        let vm_ref = &mut *vm;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            vm_ref.run(&instructions)
+        }));
+
+        match result {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                println!("[VM ERROR]: {:?}", e);
+            }
+            Err(_) => {
+                println!("[VM PANICKED] Let it crash - Recreating VM instance to recover.");
+                *vm = ScriptVm::new();
+            }
+        }
     }
 
     let notes = state.notes.lock().unwrap();
@@ -134,7 +211,15 @@ pub fn run() {
             apply_mica(&window, None).unwrap_or(());
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![search_notes, fetch_mega_note, parse_real_markdown, render_plugin])
+        .invoke_handler(tauri::generate_handler![
+            search_notes,
+            fetch_mega_note,
+            parse_real_markdown,
+            render_plugin,
+            get_vm_devtools_state,
+            export_vm_trace,
+            open_devtools
+        ])
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
                 if let Some(path) = paths.first() {

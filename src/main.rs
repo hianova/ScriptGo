@@ -2,7 +2,43 @@ use script_go::assembler::parse_asm;
 use script_go::vm::ScriptVm;
 use std::time::Instant;
 
+fn replay_trace(path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let content = std::fs::read_to_string(path)?;
+    let trace: Vec<script_go::vm::TraceStep> = serde_json::from_str(&content)?;
+    
+    println!("⏱️  Replaying trace from: {}", path);
+    println!("--------------------------------------------------");
+    for (i, step) in trace.iter().enumerate() {
+        let mut change_str = String::from("No State Mutation");
+        if let Some((reg, val)) = step.reg_change {
+            change_str = format!("R[{}] -> {}", reg, val);
+        } else if let Some((addr, val)) = step.mem_change {
+            change_str = format!("RAM[{}] -> {}", addr, val);
+        }
+        
+        println!(
+            "[#{}] PC: {:03} | INST: 0x{:08X} | {}",
+            i,
+            step.pc,
+            step.inst,
+            change_str
+        );
+    }
+    println!("--------------------------------------------------");
+    println!("✅ Trace replay completed successfully!");
+    Ok(())
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "--replay" {
+        if let Err(e) = replay_trace(&args[2]) {
+            eprintln!("❌ Replay failed: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     println!("🚀 Starting ScriptGo VM with Assembler...");
 
     let source_code = r#"

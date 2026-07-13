@@ -4,10 +4,13 @@ agent_deterrence = true
 test = "covopt_benchmark_test"
 expected = "O(N)"
 n_values = "100,500,1000"
-target_file = "src/lib.rs"
-target_line = 24
+target_file = "src/vm.rs"
+target_line = 111
 require_cache_padding = false
 require_branch_hints = false
 require_aerospace_grade = false
 require_watchdog_timeout = false
 require_stress_test = false
+
+
+

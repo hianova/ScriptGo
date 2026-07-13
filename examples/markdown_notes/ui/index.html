@@ -262,6 +262,18 @@
       }
     });
 
+    // Global Keyboard Shortcut for DevTools (Cmd/Ctrl + Shift + D)
+    window.addEventListener('keydown', async (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        try {
+          await invoke('open_devtools');
+        } catch(err) {
+          console.error("Failed to open DevTools:", err);
+        }
+      }
+    });
+
     // Initial Load
     setTimeout(() => performSearch(""), 100);
   </script>
