@@ -1,4 +1,5 @@
 #![no_std]
+#![deny(warnings)]
 
 extern crate alloc;
 
@@ -7,6 +8,7 @@ pub use scriptgo_vm::vm;
 pub mod assembler;
 pub mod binary;
 pub mod sync;
+pub mod compiler;
 
 #[cfg(test)]
 extern crate std;
