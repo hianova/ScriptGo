@@ -5,7 +5,7 @@ use std::time::Instant;
 fn replay_trace(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
     let trace: Vec<script_go::vm::TraceStep> = serde_json::from_str(&content)?;
-    
+
     println!("⏱️  Replaying trace from: {}", path);
     println!("--------------------------------------------------");
     for (i, step) in trace.iter().enumerate() {
@@ -15,13 +15,10 @@ fn replay_trace(path: &str) -> Result<(), Box<dyn std::error::Error>> {
         } else if let Some((addr, val)) = step.mem_change {
             change_str = format!("RAM[{}] -> {}", addr, val);
         }
-        
+
         println!(
             "[#{}] PC: {:03} | INST: 0x{:08X} | {}",
-            i,
-            step.pc,
-            step.inst,
-            change_str
+            i, step.pc, step.inst, change_str
         );
     }
     println!("--------------------------------------------------");
@@ -76,7 +73,7 @@ fn main() {
     "#;
 
     let code = parse_asm(source_code).unwrap();
-    
+
     let mut vm = ScriptVm::new();
     vm.print_handler = Some(|val| println!("🖨️ [PRINTREG]: {}", val));
     let start = Instant::now();
@@ -90,7 +87,7 @@ fn main() {
     println!("📊 Final Register States:");
     println!("R[1] (Fib 10) = {}", vm.registers[1]);
     println!("R[2] (Fib 11) = {}", vm.registers[2]);
-    
+
     // The 10th fibonacci number starting with 0, 1 is 55.
     // Fib 0=0, 1=1, 2=1, 3=2, 4=3, 5=5, 6=8, 7=13, 8=21, 9=34, 10=55
     if vm.registers[1] == 55 {

@@ -1,9 +1,12 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use script_go::assembler::parse_asm;
 use script_go::instruction::{Instruction, OpCode};
-use script_go::vm::ScriptVm;
 use script_go::sync::SeqLock;
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use script_go::vm::ScriptVm;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::thread;
 
 #[derive(Clone, Copy)]
@@ -64,8 +67,8 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
 
     // Scenario 2: High Contention with Hot-Reloads
     let running = Arc::new(AtomicBool::new(true));
-    
-    // Spawn a writer thread that constantly hot-reloads the script 
+
+    // Spawn a writer thread that constantly hot-reloads the script
     let writer_running = running.clone();
     let gw_writer = gateway.clone();
     let writer_handle = thread::Builder::new()
@@ -106,7 +109,6 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
         reader_handles.push(handle);
     }
 
-
     group.bench_function("contended_hot_reload", |b| {
         b.iter(|| {
             black_box(gateway.execute());
@@ -120,7 +122,10 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
         h.join().unwrap();
     }
 
-    assert!(no_std_tool::debug::check_thread_drops(), "All benchmark threads should be cleanly dropped.");
+    assert!(
+        no_std_tool::debug::check_thread_drops(),
+        "All benchmark threads should be cleanly dropped."
+    );
 
     group.finish();
 }

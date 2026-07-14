@@ -4,7 +4,7 @@ use script_go::vm::ScriptVm;
 
 fn bench_vm_execution(c: &mut Criterion) {
     let mut group = c.benchmark_group("vm_execution");
-    
+
     let code = vec![
         Instruction::new(OpCode::LoadImm as u8, 1, 250, 0), // 0: R[1] = 250
         Instruction::new(OpCode::LoadImm as u8, 2, 1, 0),   // 1: R[2] = 1

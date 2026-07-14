@@ -1,13 +1,13 @@
+use pulldown_cmark::Parser;
+use script_go::assembler::parse_asm;
+use script_go::vm::{ScriptVm, TraceStep};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::sync::Mutex;
 use std::time::Instant;
 use tauri::Manager;
-use window_vibrancy::{apply_vibrancy, apply_mica, NSVisualEffectMaterial};
-use script_go::assembler::parse_asm;
-use script_go::vm::{ScriptVm, TraceStep};
-use std::fs;
-use pulldown_cmark::Parser;
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NotePayload {
@@ -77,10 +77,8 @@ fn export_vm_trace(state: tauri::State<AppState>) -> Result<String, String> {
         trace_vec.push(vm.trace_buffer[idx]);
         idx = (idx + 1) % 1024;
     }
-    let json = serde_json::to_string_pretty(&trace_vec)
-        .map_err(|e| e.to_string())?;
-    std::fs::write("logic_trace.trace", &json)
-        .map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&trace_vec).map_err(|e| e.to_string())?;
+    std::fs::write("logic_trace.trace", &json).map_err(|e| e.to_string())?;
     Ok("Saved to logic_trace.trace".into())
 }
 
@@ -93,7 +91,7 @@ fn open_devtools(app_handle: tauri::AppHandle) -> Result<(), String> {
         tauri::WebviewWindowBuilder::new(
             &app_handle,
             "devtools",
-            tauri::WebviewUrl::App("devtools.html".into())
+            tauri::WebviewUrl::App("devtools.html".into()),
         )
         .title("ScriptGo DevTools")
         .inner_size(800.0, 600.0)
@@ -131,16 +129,20 @@ fn search_notes(query: String, state: tauri::State<AppState>) -> Vec<NotePayload
 
     let notes = state.notes.lock().unwrap();
     let q = query.to_lowercase();
-    
+
     if q.is_empty() {
-        return notes.iter().map(|n| NotePayload {
-            id: n.id,
-            title: n.title.clone(),
-            content: n.content.clone(),
-        }).collect();
+        return notes
+            .iter()
+            .map(|n| NotePayload {
+                id: n.id,
+                title: n.title.clone(),
+                content: n.content.clone(),
+            })
+            .collect();
     }
-    
-    notes.iter()
+
+    notes
+        .iter()
         .filter(|n| n.title_lower.contains(&q) || n.content_lower.contains(&q))
         .map(|n| NotePayload {
             id: n.id,
@@ -156,13 +158,16 @@ fn fetch_mega_note() -> Vec<u8> {
     for i in 0..1_000_000 {
         mega_doc.push_str(&format!("Line {}: This is a massive markdown line with **bold** text and [links](http://example.com) and `code`.\n", i));
     }
-    
+
     // Boss 1: Measure parsing 100MB to AST
     let start = Instant::now();
     let parser = Parser::new(&mega_doc);
     let _ast: Vec<_> = parser.collect();
-    println!("✅ Boss 1 (Rust AST): Parsed 100MB Markdown in {:?}", start.elapsed());
-    
+    println!(
+        "✅ Boss 1 (Rust AST): Parsed 100MB Markdown in {:?}",
+        start.elapsed()
+    );
+
     // Return raw binary (Tauri 2 IPC optimized binary payload)
     mega_doc.into_bytes()
 }
@@ -220,67 +225,64 @@ pub fn run() {
             export_vm_trace,
             open_devtools
         ])
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
-                if let Some(path) = paths.first() {
-                    let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                    if let Ok(bytes) = std::fs::read(path) {
-                        let start = std::time::Instant::now();
-                        
-                        if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
-                            // Wasm Plugin Loading
-                            if let Ok(plugin) = wasm_plugin::WasmPlugin::new(&bytes) {
-                                if let Ok(name) = plugin.get_name() {
-                                    let elapsed = start.elapsed().as_millis();
-                                    
-                                    // Store plugin
-                                    let state: tauri::State<AppState> = window.state();
-                                    state.plugins.lock().unwrap().insert(name.clone(), plugin);
-                                    
-                                    // Escape for Javascript
-                                    let name_js = serde_json::to_string(&name).unwrap();
-                                    let js = format!("
-                                        if (window.addWasmPlugin) window.addWasmPlugin({});
-                                        document.getElementById('perf-monitor').innerText = 'Loaded Wasm plugin in {}ms';
-                                    ", name_js, elapsed);
-                                    if let Some(webview) = window.get_webview_window("main") {
-                                        let _ = webview.eval(&js);
-                                    }
+        .on_window_event(|window, event| if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+            if let Some(path) = paths.first() {
+                let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                if let Ok(bytes) = std::fs::read(path) {
+                    let start = std::time::Instant::now();
+                    
+                    if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
+                        // Wasm Plugin Loading
+                        if let Ok(plugin) = wasm_plugin::WasmPlugin::new(&bytes) {
+                            if let Ok(name) = plugin.get_name() {
+                                let elapsed = start.elapsed().as_millis();
+                                
+                                // Store plugin
+                                let state: tauri::State<AppState> = window.state();
+                                state.plugins.lock().unwrap().insert(name.clone(), plugin);
+                                
+                                // Escape for Javascript
+                                let name_js = serde_json::to_string(&name).unwrap();
+                                let js = format!("
+                                    if (window.addWasmPlugin) window.addWasmPlugin({});
+                                    document.getElementById('perf-monitor').innerText = 'Loaded Wasm plugin in {}ms';
+                                ", name_js, elapsed);
+                                if let Some(webview) = window.get_webview_window("main") {
+                                    let _ = webview.eval(&js);
                                 }
                             }
-                            return;
                         }
+                        return;
+                    }
 
-                        // Markdown parsing
-                        let text = match String::from_utf8(bytes.clone()) {
-                            Ok(s) => s,
-                            Err(_) => {
-                                let (cow, _, _) = encoding_rs::BIG5.decode(&bytes);
-                                cow.into_owned()
-                            }
-                        };
-                        
-                        let parser = pulldown_cmark::Parser::new(&text);
-                        let mut html = String::new();
-                        pulldown_cmark::html::push_html(&mut html, parser);
-                        let elapsed = start.elapsed().as_millis();
-                        
-                        // Use serde_json to safely escape strings for Javascript eval
-                        let html_js = serde_json::to_string(&html).unwrap_or_else(|_| "\"Error\"".to_string());
-                        let name_js = serde_json::to_string(&file_name).unwrap_or_else(|_| "\"File\"".to_string());
-                        let js = format!(
-                            "document.getElementById('note-title-display').innerText = {};
-                             document.getElementById('note-content-display').innerHTML = {};
-                             document.getElementById('perf-monitor').innerText = 'Rendered via Rust OS Drop in {}ms';",
-                            name_js, html_js, elapsed
-                        );
-                        if let Some(webview) = window.get_webview_window("main") {
-                            let _ = webview.eval(&js);
+                    // Markdown parsing
+                    let text = match String::from_utf8(bytes.clone()) {
+                        Ok(s) => s,
+                        Err(_) => {
+                            let (cow, _, _) = encoding_rs::BIG5.decode(&bytes);
+                            cow.into_owned()
                         }
+                    };
+                    
+                    let parser = pulldown_cmark::Parser::new(&text);
+                    let mut html = String::new();
+                    pulldown_cmark::html::push_html(&mut html, parser);
+                    let elapsed = start.elapsed().as_millis();
+                    
+                    // Use serde_json to safely escape strings for Javascript eval
+                    let html_js = serde_json::to_string(&html).unwrap_or_else(|_| "\"Error\"".to_string());
+                    let name_js = serde_json::to_string(&file_name).unwrap_or_else(|_| "\"File\"".to_string());
+                    let js = format!(
+                        "document.getElementById('note-title-display').innerText = {};
+                         document.getElementById('note-content-display').innerHTML = {};
+                         document.getElementById('perf-monitor').innerText = 'Rendered via Rust OS Drop in {}ms';",
+                        name_js, html_js, elapsed
+                    );
+                    if let Some(webview) = window.get_webview_window("main") {
+                        let _ = webview.eval(&js);
                     }
                 }
             }
-            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -289,40 +291,51 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn boss_3_memory_leak_test() {
         // Simulate TTFP (Time to First Paint data structure prep)
         let start = Instant::now();
-        let app_state = AppState {
+        let _app_state = AppState {
             vm: Mutex::new(ScriptVm::new()),
             notes: Mutex::new(vec![]),
             plugins: Mutex::new(HashMap::new()),
         };
-        println!("✅ Boss 3 (TTFP): Backend structure ready in {:?}", start.elapsed());
-        
+        println!(
+            "✅ Boss 3 (TTFP): Backend structure ready in {:?}",
+            start.elapsed()
+        );
+
         let mut mem_initial = 0;
         // Run 1,000,000 iterations of script logic parsing (Hot Reload Simulation)
         let sgo_code = "LOADIMM 1 200\nLOADIMM 2 200\nSUB 3 1 2\nHALT\n";
-        
+
         let sim_start = Instant::now();
         for i in 0..1_000_000 {
-            if i == 0 { mem_initial = get_rss_memory(); }
-            let instructions = parse_asm(&sgo_code).unwrap();
+            if i == 0 {
+                mem_initial = get_rss_memory();
+            }
+            let instructions = parse_asm(sgo_code).unwrap();
             let mut vm = ScriptVm::new();
             let _ = vm.run(&instructions);
         }
-        
+
         let mem_final = get_rss_memory();
-        println!("✅ Boss 3 (Memory Check): Initial {} KB, Final {} KB after 1,000,000 hot-reloads", mem_initial, mem_final);
-        println!("✅ Boss 3 (Speed): 1,000,000 iterations finished in {:?}", sim_start.elapsed());
+        println!(
+            "✅ Boss 3 (Memory Check): Initial {} KB, Final {} KB after 1,000,000 hot-reloads",
+            mem_initial, mem_final
+        );
+        println!(
+            "✅ Boss 3 (Speed): 1,000,000 iterations finished in {:?}",
+            sim_start.elapsed()
+        );
         assert!(mem_final < mem_initial + 5000, "Memory leak detected!"); // Should not grow by >5MB
     }
 
     fn get_rss_memory() -> usize {
         // macOS memory reading via ps
         let output = std::process::Command::new("ps")
-            .args(&["-o", "rss=", "-p", &std::process::id().to_string()])
+            .args(["-o", "rss=", "-p", &std::process::id().to_string()])
             .output()
             .unwrap();
         let s = String::from_utf8_lossy(&output.stdout);

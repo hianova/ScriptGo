@@ -1,1 +1,3 @@
-fn main() { markdown_notes::run() }
+fn main() {
+    markdown_notes::run()
+}

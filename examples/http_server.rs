@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use tokio::net::TcpListener;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use arc_swap::ArcSwap;
 use script_go::assembler::parse_asm;
 use script_go::instruction::Instruction;
 use script_go::vm::ScriptVm;
+use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 
 struct HttpGateway {
     script: ArcSwap<Vec<Instruction>>,
@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         let (mut socket, _) = listener.accept().await?;
         let gw = gateway.clone();
-        
+
         // Fully embedded In-Process routing. ZERO CGI overhead.
         tokio::spawn(async move {
             let mut buf = [0; 1024];

@@ -36,28 +36,37 @@ impl WasmPlugin {
         let mut linker = Linker::new(&self.engine);
 
         // host_set_result(ptr: i32, len: i32)
-        linker.func_wrap("env", "host_set_result", |mut caller: Caller<'_, PluginState>, ptr: i32, len: i32| {
-            let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
-            let mut buffer = vec![0; len as usize];
-            memory.read(&caller, ptr as usize, &mut buffer).unwrap();
-            let result_str = String::from_utf8_lossy(&buffer).into_owned();
-            caller.data_mut().result_buffer = result_str;
-        })?;
+        linker.func_wrap(
+            "env",
+            "host_set_result",
+            |mut caller: Caller<'_, PluginState>, ptr: i32, len: i32| {
+                let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
+                let mut buffer = vec![0; len as usize];
+                memory.read(&caller, ptr as usize, &mut buffer).unwrap();
+                let result_str = String::from_utf8_lossy(&buffer).into_owned();
+                caller.data_mut().result_buffer = result_str;
+            },
+        )?;
 
         // host_log(ptr: i32, len: i32)
-        linker.func_wrap("env", "host_log", |mut caller: Caller<'_, PluginState>, ptr: i32, len: i32| {
-            let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
-            let mut buffer = vec![0; len as usize];
-            memory.read(&caller, ptr as usize, &mut buffer).unwrap();
-            let result_str = String::from_utf8_lossy(&buffer).into_owned();
-            println!("[WASM LOG]: {}", result_str);
-        })?;
+        linker.func_wrap(
+            "env",
+            "host_log",
+            |mut caller: Caller<'_, PluginState>, ptr: i32, len: i32| {
+                let memory = caller.get_export("memory").unwrap().into_memory().unwrap();
+                let mut buffer = vec![0; len as usize];
+                memory.read(&caller, ptr as usize, &mut buffer).unwrap();
+                let result_str = String::from_utf8_lossy(&buffer).into_owned();
+                println!("[WASM LOG]: {}", result_str);
+            },
+        )?;
 
         let instance = linker.instantiate(&mut store, &self.module)?;
-        
-        let func = instance.get_func(&mut store, method)
+
+        let func = instance
+            .get_func(&mut store, method)
             .ok_or_else(|| anyhow::anyhow!("Method {} not found in plugin", method))?;
-            
+
         let typed_func = func.typed::<(), ()>(&store)?;
         typed_func.call(&mut store, ())?;
 

@@ -22,7 +22,8 @@ fn main() {
     fs::create_dir_all(project_dir.join("ui")).unwrap();
 
     // 1. Cargo.toml
-    let cargo_toml = format!(r#"[package]
+    let cargo_toml = format!(
+        r#"[package]
 name = "{}"
 version = "0.1.0"
 edition = "2021"
@@ -35,11 +36,17 @@ tauri = {{ version = "2.0.0-rc", features = [] }}
 serde = {{ version = "1.0", features = ["derive"] }}
 serde_json = "1.0"
 script_go = {{ git = "https://github.com/hianova/ScriptGo" }}
-"#, project_name);
+"#,
+        project_name
+    );
     fs::write(project_dir.join("Cargo.toml"), cargo_toml).unwrap();
 
     // 2. build.rs
-    fs::write(project_dir.join("build.rs"), "fn main() { tauri_build::build() }").unwrap();
+    fs::write(
+        project_dir.join("build.rs"),
+        "fn main() { tauri_build::build() }",
+    )
+    .unwrap();
 
     // 3. tauri.conf.json
     let tauri_conf = r#"{
@@ -146,7 +153,11 @@ pub fn run() {
 }"#;
     // Actually the package name might be hyphens, so module is underscores
     let pkg_module = project_name.replace("-", "_");
-    fs::write(project_dir.join("src/main.rs"), cli_main.replace("create_scriptgo_app", &pkg_module)).unwrap();
+    fs::write(
+        project_dir.join("src/main.rs"),
+        cli_main.replace("create_scriptgo_app", &pkg_module),
+    )
+    .unwrap();
 
     println!("✅ ScriptGo App '{}' created successfully!", project_name);
     println!("👉 Run the following commands:");
