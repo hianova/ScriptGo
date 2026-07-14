@@ -7,7 +7,6 @@ exclude = [".covopt/"]
 
 [dependencies]
 no_std_tool = { version = "1.0.0", path = "../no_std_tool" }
-vec101 = { version = "1.0.0", path = "../vec101" }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 scriptgo-vm = { version = "0.1.0", path = "../scriptgo-vm" }
