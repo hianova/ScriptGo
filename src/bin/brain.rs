@@ -1,6 +1,6 @@
 use std::net::UdpSocket;
 use std::mem;
-use vec101::{vec101_compute, vec101_context};
+use vec101::core::{ComputeContextBuilder, sensor::ContinuousInput};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -17,6 +17,20 @@ struct BlenderForce {
     fx: f32,
     fy: f32,
     fz: f32,
+}
+
+struct StateQuantizer;
+
+impl ContinuousInput for StateQuantizer {
+    fn quantize_continuous_stream(&self, raw_input: &[f32]) -> (Vec<i8>, Vec<i32>) {
+        let mut x = Vec::new();
+        let mut s = Vec::new();
+        for &val in raw_input {
+            x.push((val * 127.0) as i8);
+            s.push(1);
+        }
+        (x, s)
+    }
 }
 
 pub fn main() -> std::io::Result<()> {
@@ -54,26 +68,25 @@ pub fn main() -> std::io::Result<()> {
             let fy = 0.0;
             let mut fz = 0.0;
 
-            unsafe {
-                // Initialize vec101 context with observed state
-                let ctx: vec101_context = mem::zeroed();
+            let quantizer = StateQuantizer;
+            let mut engine = ComputeContextBuilder::new()
+                .batch_size(1)
+                .build();
                 
-                // We'll mock the inference execution since vec101_context internals are opaque.
-                // In a real integration, state parameters are fed into the 1.58-bit neural block.
-                vec101_compute(&ctx);
-                
-                // Extremely simple reflex algorithm to push the object back to origin
-                // If it goes too far right (x > 0), push left (negative force)
-                if state.x > 2.0 {
-                    fx = -0.5;
-                } else if state.x < -2.0 {
-                    fx = 0.5;
-                }
-                
-                // Dampen the gravity (if it falls too fast)
-                if state.z < 0.0 {
-                    fz = 0.8;
-                }
+            engine.feed_continuous_inputs(&quantizer, &[state.x, state.y, state.z]);
+            engine.compute();
+            
+            // Extremely simple reflex algorithm to push the object back to origin
+            // If it goes too far right (x > 0), push left (negative force)
+            if state.x > 2.0 {
+                fx = -0.5;
+            } else if state.x < -2.0 {
+                fx = 0.5;
+            }
+            
+            // Dampen the gravity (if it falls too fast)
+            if state.z < 0.0 {
+                fz = 0.8;
             }
 
             // Act Phase
