@@ -48,7 +48,6 @@ impl Parser {
             };
             self.advance();
             
-            // Assume type is Int for now if omitted for simplicity, but we can parse colon
             let mut ty = Type::Int;
             if self.match_token(&Token::Colon) {
                 if let Some(Token::Identifier(tname)) = self.current() {
@@ -94,7 +93,111 @@ impl Parser {
             return Ok(Statement::If(condition, then_branch, else_branch));
         }
 
+        if self.match_token(&Token::While) {
+            let condition = self.parse_expr()?;
+            if !self.match_token(&Token::LBrace) {
+                return Err("Expected '{' after while condition".into());
+            }
+            let mut body = Vec::new();
+            while !self.match_token(&Token::RBrace) {
+                body.push(self.parse_statement()?);
+            }
+            return Ok(Statement::While(condition, body));
+        }
+
+        if self.match_token(&Token::Return) {
+            if self.match_token(&Token::Semicolon) {
+                return Ok(Statement::Return(None));
+            }
+            let expr = self.parse_expr()?;
+            self.match_token(&Token::Semicolon);
+            return Ok(Statement::Return(Some(expr)));
+        }
+
+        if self.match_token(&Token::Fn) {
+            let name = match self.current() {
+                Some(Token::Identifier(name)) => name.clone(),
+                _ => return Err("Expected function name".into()),
+            };
+            self.advance();
+
+            if !self.match_token(&Token::LParen) {
+                return Err("Expected '(' after function name".into());
+            }
+
+            let mut args = Vec::new();
+            if !self.match_token(&Token::RParen) {
+                loop {
+                    let arg_name = match self.current() {
+                        Some(Token::Identifier(name)) => name.clone(),
+                        _ => return Err("Expected argument name".into()),
+                    };
+                    self.advance();
+                    if !self.match_token(&Token::Colon) {
+                        return Err("Expected ':' after argument name".into());
+                    }
+                    let ty = match self.current() {
+                        Some(Token::Identifier(tname)) => match tname.as_str() {
+                            "Int" => Type::Int,
+                            "Float" => Type::Float,
+                            "String" => Type::String,
+                            "Tensor" => Type::Tensor,
+                            "DynamicArray" => Type::DynamicArray,
+                            _ => return Err("Unknown type".into()),
+                        },
+                        _ => return Err("Expected type for argument".into()),
+                    };
+                    self.advance();
+                    args.push((arg_name, ty));
+
+                    if !self.match_token(&Token::Comma) {
+                        break;
+                    }
+                }
+                if !self.match_token(&Token::RParen) {
+                    return Err("Expected ')'".into());
+                }
+            }
+
+            let mut ret_ty = Type::Void;
+            if self.match_token(&Token::Minus) && self.match_token(&Token::Gt) { // ->
+                if let Some(Token::Identifier(tname)) = self.current() {
+                    ret_ty = match tname.as_str() {
+                        "Int" => Type::Int,
+                        "Float" => Type::Float,
+                        "String" => Type::String,
+                        "Tensor" => Type::Tensor,
+                        "DynamicArray" => Type::DynamicArray,
+                        _ => return Err("Unknown return type".into()),
+                    };
+                    self.advance();
+                }
+            }
+
+            if !self.match_token(&Token::LBrace) {
+                return Err("Expected '{' after function signature".into());
+            }
+
+            let mut body = Vec::new();
+            while !self.match_token(&Token::RBrace) {
+                body.push(self.parse_statement()?);
+            }
+
+            return Ok(Statement::FunctionDecl(name, args, ret_ty, body));
+        }
+
+        // It could be an assignment or just an expr stmt
         let expr = self.parse_expr()?;
+        if self.match_token(&Token::Equal) {
+            if let Expr::Identifier(ident) = expr {
+                let right = self.parse_expr()?;
+                self.match_token(&Token::Semicolon);
+                return Ok(Statement::Assign(ident, right));
+            } else {
+                return Err("Invalid assignment target".into());
+            }
+        }
+        
         self.match_token(&Token::Semicolon);
         Ok(Statement::ExprStmt(expr))
     }
@@ -177,6 +280,14 @@ impl Parser {
                 } else {
                     Ok(Expr::Identifier(v))
                 }
+            }
+            Some(Token::LParen) => {
+                self.advance();
+                let expr = self.parse_expr()?;
+                if !self.match_token(&Token::RParen) {
+                    return Err("Expected ')'".into());
+                }
+                Ok(expr)
             }
             _ => Err("Unexpected token".into()),
         }

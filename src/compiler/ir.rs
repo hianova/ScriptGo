@@ -12,11 +12,22 @@ pub enum Op {
     Sub(ValueId, ValueId),
     Mul(ValueId, ValueId),
     Div(ValueId, ValueId),
+    Eq(ValueId, ValueId),
+    Lt(ValueId, ValueId),
     
     // SSA specific operations
     Phi(Vec<(ValueId, usize)>), // Block id
     
+    // Control Flow
+    Jmp(usize),
+    JmpIf(ValueId, usize, usize), // cond, true_block, false_block
+
+    // Variable Access (to bypass full SSA Phi requirements for loops)
+    VarLoad(String),
+    VarStore(String, ValueId),
+
     // FFI and External Calls
+    Call(String, Vec<ValueId>), // SGL Function call
     FfiCall {
         func_id: u32,
         args: Vec<ValueId>,
