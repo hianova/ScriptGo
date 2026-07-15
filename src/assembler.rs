@@ -96,6 +96,11 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
 
             "UICALL" => Instruction::new(OpCode::UiCall as u8, u8_p1, u8_p2, u8_p3),
             "NEURALCALL" => Instruction::new(OpCode::NeuralCall as u8, u8_p1, u8_p2, u8_p3),
+            "HARDWARECALL" => Instruction::new(OpCode::HardwareCall as u8, u8_p1, u8_p2, u8_p3),
+            "SYSCALL" => Instruction::new(OpCode::SysCall as u8, u8_p1, u8_p2, u8_p3),
+            "EQ" => Instruction::new(OpCode::CmpEq as u8, u8_p1, u8_p2, u8_p3),
+            "FLT" => Instruction::new(OpCode::CmpLt as u8, u8_p1, u8_p2, u8_p3),
+            "JUMPNOT" => Instruction::new(OpCode::JmpIfZero as u8, u8_p1, p2_low, p2_high),
 
             _ => return Err(AsmError::InvalidMnemonic { line: line_num }),
         };
