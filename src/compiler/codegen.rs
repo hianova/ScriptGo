@@ -137,6 +137,11 @@ impl CodeGen {
                             let r_dest = self.get_reg(inst.id);
                             let r_arg0 = self.get_reg(args[0]);
                             bytecode.push(VmInst::new(OpCode::NeuralCall as u8, r_dest, r_arg0, 0));
+                        } else if name == "ui_call" {
+                            let r_arg0 = self.get_reg(args[0]);
+                            let r_arg1 = self.get_reg(args[1]);
+                            let r_arg2 = self.get_reg(args[2]);
+                            bytecode.push(VmInst::new(0xFE, r_arg0, r_arg1, r_arg2));
                         } else if name == "db_get_balance" {
                             let r_dest = self.get_reg(inst.id);
                             let r_arg0 = self.get_reg(args[0]);

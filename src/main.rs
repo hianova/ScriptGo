@@ -35,6 +35,19 @@ fn main() {
         }
         return;
     }
+    if args.len() >= 4 && args[1] == "--build" {
+        let input = &args[2];
+        let output = &args[3];
+        let content = std::fs::read_to_string(input).expect("Failed to read input file");
+        let code = parse_asm(&content).expect("Failed to assemble");
+        let mut bytes = Vec::new();
+        for inst in code {
+            bytes.extend_from_slice(&(inst.0 as u32).to_le_bytes());
+        }
+        std::fs::write(output, &bytes).expect("Failed to write output file");
+        println!("Successfully built {} -> {}", input, output);
+        return;
+    }
 
     println!("🚀 Starting ScriptGo VM with Assembler...");
 
