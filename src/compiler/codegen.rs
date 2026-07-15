@@ -127,6 +127,31 @@ impl CodeGen {
                         backpatch_jumps.push((bytecode.len(), *true_block, false));
                         bytecode.push(VmInst::new(OpCode::Jmp as u8, 0, 0, 0)); // Placeholder jump to true
                     }
+                    Op::Call(name, args) => {
+                        if name == "set_color" {
+                            let r_arg0 = self.get_reg(args[0]);
+                            let r_arg1 = self.get_reg(args[1]);
+                            let r_arg2 = self.get_reg(args[2]);
+                            bytecode.push(VmInst::new(OpCode::SysCall as u8, r_arg0, r_arg1, r_arg2));
+                        } else if name == "forward_pass" {
+                            let r_dest = self.get_reg(inst.id);
+                            let r_arg0 = self.get_reg(args[0]);
+                            bytecode.push(VmInst::new(OpCode::NeuralCall as u8, r_dest, r_arg0, 0));
+                        } else if name == "db_get_balance" {
+                            let r_dest = self.get_reg(inst.id);
+                            let r_arg0 = self.get_reg(args[0]);
+                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, r_dest, r_arg0, 0));
+                        } else if name == "db_get_status" {
+                            let r_dest = self.get_reg(inst.id);
+                            let r_arg0 = self.get_reg(args[0]);
+                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, r_dest, r_arg0, 1));
+                        } else if name == "vector_add" {
+                            let r_dest = self.get_reg(inst.id);
+                            // arg0 is size
+                            let r_arg0 = self.get_reg(args[0]);
+                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, r_dest, r_arg0, 2));
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -280,6 +305,15 @@ impl CodeGen {
                     _ => return Err("Unsupported operator in Phase 3".into()),
                 };
                 self.append_inst(func, block_id, Instruction { id, op: ir_op });
+                Ok(id)
+            }
+            Expr::Call(name, args) => {
+                let mut arg_ids = Vec::new();
+                for arg in args {
+                    arg_ids.push(self.expr_to_ir(arg, func, block_id)?);
+                }
+                let id = func.alloc_val();
+                self.append_inst(func, block_id, Instruction { id, op: Op::Call(name.clone(), arg_ids) });
                 Ok(id)
             }
             _ => Err("Expression not supported in Phase 3".into()),
