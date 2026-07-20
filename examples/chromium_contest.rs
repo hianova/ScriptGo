@@ -36,7 +36,7 @@ fn main() {
     use script_go::compiler::lexer::Lexer;
     use script_go::compiler::parser::Parser;
     use script_go::compiler::codegen::CodeGen;
-    use scriptgo_vm::vm::ScriptVm;
+    use script_go::vm::ScriptVm;
     
     let mut lexer = Lexer::new(sgl_code);
     let tokens = lexer.tokenize();

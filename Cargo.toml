@@ -6,15 +6,15 @@ edition = "2021"
 exclude = [".covopt/"]
 
 [dependencies]
-no_std_tool = { version = "1.0.0", path = "../no_std_tool" }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
-scriptgo-vm = { version = "0.1.0", path = "../scriptgo-vm" }
+no_std_tool = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["alloc"] }
+num_cpus = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5"
-arc-swap = "1.6"
-tokio = { version = "1", features = ["full"] }
+criterion = { workspace = true }
+arc-swap = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 
 [[bench]]
 name = "vm_bench"
@@ -24,12 +24,4 @@ harness = false
 name = "concurrency_bench"
 harness = false
 
-[workspace]
-members = [
-    "tools/create-scriptgo-app",
-    "examples/markdown_notes"
-]
-exclude = [
-    "examples/tauri_framework",
-    "tools/create-scriptgo-app/my-test-app"
-]
+

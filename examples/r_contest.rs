@@ -7,7 +7,7 @@ fn main() {
     
     // 1. Benchmark Python List Vector
     println!("Running Python Vector Addition benchmark (10,000,000 elements)...");
-    let start_py = Instant::now();
+    let _start_py = Instant::now();
     let output_py = Command::new("python3")
         .arg("examples/benchmarks/r_vector.py")
         .output()
@@ -43,7 +43,7 @@ fn main() {
     use script_go::compiler::lexer::Lexer;
     use script_go::compiler::parser::Parser;
     use script_go::compiler::codegen::CodeGen;
-    use scriptgo_vm::vm::ScriptVm;
+    use script_go::vm::ScriptVm;
     
     let mut lexer = Lexer::new(sgl_code);
     let tokens = lexer.tokenize();

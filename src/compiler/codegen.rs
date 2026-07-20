@@ -1,6 +1,6 @@
 use crate::compiler::ast::*;
 use crate::compiler::ir::*;
-use scriptgo_vm::instruction::{Instruction as VmInst, OpCode};
+use no_std_tool::scriptgo_vm::instruction::{Instruction as VmInst, OpCode};
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -10,6 +10,12 @@ pub struct CodeGen {
     vars_reg: HashMap<String, u8>,
     vm_regs: HashMap<ValueId, u8>,
     reg_counter: u8,
+}
+
+impl Default for CodeGen {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CodeGen {
@@ -70,7 +76,7 @@ impl CodeGen {
                     Op::LoadImm(val) => {
                         let r = self.alloc_reg(inst.id);
                         let v = *val;
-                        if v >= 0 && v < 256 {
+                        if (0..256).contains(&v) {
                             bytecode.push(VmInst::new(OpCode::LoadImm as u8, r, v as u8, 0));
                         } else {
                             let low = (v & 0xFF) as u8;
@@ -171,7 +177,7 @@ impl CodeGen {
                 let low = (target_pc & 0xFF) as u8;
                 let high = ((target_pc >> 8) & 0xFF) as u8;
                 if is_cond {
-                    let r_cond = bytecode[idx].a() as u8;
+                    let r_cond = no_std_tool::inst_a!(bytecode[idx]) as u8;
                     bytecode[idx] = VmInst::new(OpCode::JmpIfZero as u8, r_cond, low, high);
                 } else {
                     bytecode[idx] = VmInst::new(OpCode::Jmp as u8, 0, low, high);

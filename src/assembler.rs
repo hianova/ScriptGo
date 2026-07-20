@@ -1,5 +1,6 @@
 use crate::instruction::{Instruction, OpCode};
 use alloc::vec::Vec;
+use no_std_tool::opcode;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AsmError {
@@ -121,8 +122,8 @@ mod tests {
         assert!(result.is_ok());
         let code = result.unwrap();
         assert_eq!(code.len(), 4);
-        assert_eq!(code[0].opcode(), OpCode::LoadImm as u8);
-        assert_eq!(code[2].opcode(), OpCode::PrintReg as u8);
+        assert_eq!(opcode!(code[0]), OpCode::LoadImm as u8);
+        assert_eq!(opcode!(code[2]), OpCode::PrintReg as u8);
     }
 
     #[test]

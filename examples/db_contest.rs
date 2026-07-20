@@ -1,6 +1,5 @@
 use std::process::Command;
 use std::time::Instant;
-use std::sync::Arc;
 
 struct Record {
     id: u32,
@@ -19,7 +18,7 @@ fn main() {
         .arg("examples/benchmarks/db_filter.py")
         .output()
         .expect("Failed to execute python3. Ensure it is installed.");
-    let py_duration = start_py.elapsed(); // includes DB setup, but let's just use Python's printed time if we want to be exact, or compare raw. We'll extract Python's time!
+    let _py_duration = start_py.elapsed(); // includes DB setup, but let's just use Python's printed time if we want to be exact, or compare raw. We'll extract Python's time!
     
     let mut py_time_sec = 0.0;
     if output_py.status.success() {
@@ -73,7 +72,7 @@ fn main() {
     use script_go::compiler::lexer::Lexer;
     use script_go::compiler::parser::Parser;
     use script_go::compiler::codegen::CodeGen;
-    use scriptgo_vm::vm::ScriptVm;
+    use script_go::vm::ScriptVm;
     
     let mut lexer = Lexer::new(sgl_code);
     let tokens = lexer.tokenize();
@@ -93,7 +92,7 @@ fn main() {
     // Let's just generate the logic in the handler because we just want to test dispatch overhead!
     
     vm.hardware_handler = Some(|vm: &mut ScriptVm, dest: usize, src: usize, op: usize| {
-        let id = vm.registers[src] as u32;
+        let id = vm.registers[src];
         if op == 0 {
             // get_balance
             vm.registers[dest] = (id * 17) % 5000;

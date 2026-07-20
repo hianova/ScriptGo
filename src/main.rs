@@ -42,7 +42,7 @@ fn main() {
         let code = parse_asm(&content).expect("Failed to assemble");
         let mut bytes = Vec::new();
         for inst in code {
-            bytes.extend_from_slice(&(inst.0 as u32).to_le_bytes());
+            bytes.extend_from_slice(&inst.0.to_le_bytes());
         }
         std::fs::write(output, &bytes).expect("Failed to write output file");
         println!("Successfully built {} -> {}", input, output);
