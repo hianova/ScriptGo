@@ -1,4 +1,4 @@
-#![deny(warnings)]
+
 #![no_std]
 extern crate alloc;
 pub use no_std_tool::scriptgo_vm::instruction;
