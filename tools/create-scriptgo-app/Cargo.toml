@@ -1,9 +1,0 @@
-[package]
-name = "create-scriptgo-app"
-version = "0.1.0"
-edition = "2021"
-description = "A CLI tool to scaffold ScriptGo + Tauri applications"
-
-exclude = [".covopt/"]
-
-[dependencies]

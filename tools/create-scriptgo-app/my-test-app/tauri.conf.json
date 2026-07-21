@@ -1,5 +1,0 @@
-{
-  "build": { "devPath": "ui", "distDir": "ui" },
-  "package": { "productName": "ScriptGoApp", "version": "0.1.0" },
-  "tauri": { "bundle": { "active": false, "identifier": "com.scriptgo.app" } }
-}
