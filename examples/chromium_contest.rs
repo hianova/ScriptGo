@@ -4,7 +4,7 @@ use std::time::Instant;
 fn main() {
     println!("🏎️  Chromium (V8) vs ScriptGo (SGL) Contest 🏎️");
     println!("--------------------------------------------------");
-    
+
     // 1. Benchmark Node.js (V8)
     println!("Running V8 (Node.js) benchmark...");
     let start_node = Instant::now();
@@ -13,11 +13,14 @@ fn main() {
         .output()
         .expect("Failed to execute node. Ensure Node.js is installed.");
     let node_duration = start_node.elapsed();
-    
+
     if output_node.status.success() {
         println!("✅ Node.js (V8) completed in: {:?}", node_duration);
     } else {
-        println!("❌ Node.js (V8) failed: {:?}", String::from_utf8_lossy(&output_node.stderr));
+        println!(
+            "❌ Node.js (V8) failed: {:?}",
+            String::from_utf8_lossy(&output_node.stderr)
+        );
     }
 
     // 2. Benchmark ScriptGo
@@ -32,22 +35,23 @@ fn main() {
     "#;
 
     let start_sgl = Instant::now();
-    
+
+    use script_go::compiler::codegen::CodeGen;
     use script_go::compiler::lexer::Lexer;
     use script_go::compiler::parser::Parser;
-    use script_go::compiler::codegen::CodeGen;
     use script_go::vm::ScriptVm;
-    
+
     let mut lexer = Lexer::new(sgl_code);
     let tokens = lexer.tokenize();
     let mut parser = Parser::new(tokens);
     let ast = parser.parse().unwrap();
     let mut codegen = CodeGen::new();
     let bytecode = codegen.compile(&ast).unwrap();
-    
+
     let mut vm = ScriptVm::new();
     vm.max_steps = Some(10_000_000); // Allow enough steps
     let _ = vm.run(&bytecode);
+    std::hint::black_box(vm.registers[1]);
 
     let sgl_duration = start_sgl.elapsed();
     println!("✅ ScriptGo completed in: {:?}", sgl_duration);

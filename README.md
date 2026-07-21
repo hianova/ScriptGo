@@ -10,6 +10,7 @@
 - **HFT Gateway**: Built-in lock-free RCU (Read-Copy-Update) hot-reload mechanism via `arc-swap`. Uncontended parse+execution latency is ~28ns; Contended Hot-Reload latency maxes at ~67ns with absolutely zero microsecond-level spikes.
 - **Tauri Native UI Engine**: Complete replacement for Flutter & React Native. ScriptGo drives Tauri WebView purely via IPC with `UiCall (0xFE)` zero-copy events, rendering highly optimized Virtual DOM without heavy JS frameworks.
 - **Zero-Downtime OTA (Over-The-Air)**: Business and UI logic encapsulated in `.sgo` scripts can be reloaded in under 250ns, achieving true zero-downtime hot reloading for desktop and mobile apps without App Store updates.
+- **Native Async & Coroutines**: Deep integration of `spawn!`, `await!`, and `yield!` primitives mapped directly to VM Opcodes (`Spawn (42)`, `Await (43)`, `Yield (38)`), completely bypassing OS context switches and function call overhead for high-concurrency event loops.
 
 ## Benchmarks
 

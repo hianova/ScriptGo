@@ -94,7 +94,7 @@ fn main() {
     let duration = start.elapsed();
 
     println!("✅ Execution Finished!");
-    println!("⏱️  Steps Executed: {}", steps);
+    println!("⏱️  Steps Executed: {:?}", steps);
     println!("⏱️  Time Taken: {:?}", duration);
     println!("--------------------------------------------------");
     println!("📊 Final Register States:");

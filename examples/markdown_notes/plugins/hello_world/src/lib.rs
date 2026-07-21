@@ -39,7 +39,7 @@ pub extern "C" fn plugin_render() {
             </div>
         </div>
     "#;
-    
+
     unsafe {
         host_set_result(html.as_ptr(), html.len());
     }

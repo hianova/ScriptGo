@@ -1,5 +1,5 @@
-use alloc::vec::Vec;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ValueId(pub usize);
@@ -14,10 +14,10 @@ pub enum Op {
     Div(ValueId, ValueId),
     Eq(ValueId, ValueId),
     Lt(ValueId, ValueId),
-    
+
     // SSA specific operations
     Phi(Vec<(ValueId, usize)>), // Block id
-    
+
     // Control Flow
     Jmp(usize),
     JmpIf(ValueId, usize, usize), // cond, true_block, false_block
@@ -28,15 +28,18 @@ pub enum Op {
 
     // FFI and External Calls
     Call(String, Vec<ValueId>), // SGL Function call
-    FfiCall {
-        func_id: u32,
-        args: Vec<ValueId>,
-    },
+    FfiCall { func_id: u32, args: Vec<ValueId> },
+    MacroCall(String, Vec<ValueId>),
     
+    // Async & Coroutine
+    Spawn(u16), // takes target PC
+    Await(ValueId), // takes task ID
+    Yield,
+
     // DB / Tensor intrinsic fusion before lowering
     TensorMul(ValueId, ValueId),
     DbFilter(ValueId, String), // simplified representation
-    
+
     // Return
     Return(Option<ValueId>),
 }

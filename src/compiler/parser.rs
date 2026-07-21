@@ -1,6 +1,7 @@
 use crate::compiler::ast::*;
 use crate::compiler::lexer::*;
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -11,7 +12,10 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, position: 0 }
+        Self {
+            tokens,
+            position: 0,
+        }
     }
 
     fn current(&self) -> Option<&Token> {
@@ -47,7 +51,7 @@ impl Parser {
                 _ => return Err("Expected identifier after 'let'".into()),
             };
             self.advance();
-            
+
             let mut ty = Type::Int;
             if self.match_token(&Token::Colon) {
                 if let Some(Token::Identifier(tname)) = self.current() {
@@ -160,7 +164,8 @@ impl Parser {
             }
 
             let mut ret_ty = Type::Void;
-            if self.match_token(&Token::Minus) && self.match_token(&Token::Gt) { // ->
+            if self.match_token(&Token::Minus) && self.match_token(&Token::Gt) {
+                // ->
                 if let Some(Token::Identifier(tname)) = self.current() {
                     ret_ty = match tname.as_str() {
                         "Int" => Type::Int,
@@ -197,7 +202,7 @@ impl Parser {
                 return Err("Invalid assignment target".into());
             }
         }
-        
+
         self.match_token(&Token::Semicolon);
         Ok(Statement::ExprStmt(expr))
     }
@@ -241,6 +246,8 @@ impl Parser {
             }
             Some(Token::Identifier(v)) => {
                 self.advance();
+                let is_macro = self.match_token(&Token::Bang);
+                
                 if self.match_token(&Token::LParen) {
                     let mut args = Vec::new();
                     if !self.match_token(&Token::RParen) {
@@ -254,11 +261,17 @@ impl Parser {
                             return Err("Expected ')'".into());
                         }
                     }
-                    Ok(Expr::Call(v, args))
+                    if is_macro {
+                        Ok(Expr::MacroCall(v, args))
+                    } else {
+                        Ok(Expr::Call(v, args))
+                    }
                 } else if self.match_token(&Token::Dot) {
                     // Method chaining support
                     if let Some(Token::Identifier(method_name)) = self.current().cloned() {
                         self.advance();
+                        let is_macro = self.match_token(&Token::Bang);
+                        
                         if self.match_token(&Token::LParen) {
                             let mut args = Vec::new();
                             if !self.match_token(&Token::RParen) {
@@ -270,7 +283,15 @@ impl Parser {
                                 }
                                 self.match_token(&Token::RParen);
                             }
-                            Ok(Expr::MethodCall(Box::new(Expr::Identifier(v)), method_name, args))
+                            if is_macro {
+                                Ok(Expr::MacroCall(format!("{}.{}", v, method_name), args))
+                            } else {
+                                Ok(Expr::MethodCall(
+                                    Box::new(Expr::Identifier(v)),
+                                    method_name,
+                                    args,
+                                ))
+                            }
                         } else {
                             Err("Expected '(' after method name".into())
                         }

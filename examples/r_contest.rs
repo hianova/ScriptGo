@@ -4,7 +4,7 @@ use std::time::Instant;
 fn main() {
     println!("📈 R/NumPy (Python List) vs ScriptGo (SGL SIMD/Vector) Contest 📈");
     println!("--------------------------------------------------");
-    
+
     // 1. Benchmark Python List Vector
     println!("Running Python Vector Addition benchmark (10,000,000 elements)...");
     let _start_py = Instant::now();
@@ -13,7 +13,7 @@ fn main() {
         .output()
         .expect("Failed to execute python3. Ensure it is installed.");
     let mut py_time_sec = 0.0;
-    
+
     if output_py.status.success() {
         let result = String::from_utf8_lossy(&output_py.stdout);
         println!("✅ Python completed.");
@@ -27,49 +27,52 @@ fn main() {
             }
         }
     } else {
-        println!("❌ Python failed: {:?}", String::from_utf8_lossy(&output_py.stderr));
+        println!(
+            "❌ Python failed: {:?}",
+            String::from_utf8_lossy(&output_py.stderr)
+        );
     }
 
     // 2. Benchmark ScriptGo
     println!("\nRunning ScriptGo (SGL) SIMD Vector Addition...");
-    
+
     let sgl_code = r#"
         let size: Int = 10000000;
         let result: Int = vector_add(size);
     "#;
 
     let start_sgl = Instant::now();
-    
+
+    use script_go::compiler::codegen::CodeGen;
     use script_go::compiler::lexer::Lexer;
     use script_go::compiler::parser::Parser;
-    use script_go::compiler::codegen::CodeGen;
     use script_go::vm::ScriptVm;
-    
+
     let mut lexer = Lexer::new(sgl_code);
     let tokens = lexer.tokenize();
     let mut parser = Parser::new(tokens);
     let ast = parser.parse().unwrap();
     let mut codegen = CodeGen::new();
     let bytecode = codegen.compile(&ast).unwrap();
-    
+
     let mut vm = ScriptVm::new();
-    
+
     vm.hardware_handler = Some(|vm: &mut ScriptVm, dest: usize, src: usize, op: usize| {
         if op == 2 {
             // vector_add
             let size = vm.registers[src] as usize;
-            
+
             // Rust Host allocates arrays and does addition
             // In a real SGL engine, arrays would be pre-allocated or mapped to GPU
             let a = vec![1; size];
             let b = vec![2; size];
             let mut c = vec![0; size];
-            
+
             // Vector addition loop
             for i in 0..size {
                 c[i] = a[i] + b[i];
             }
-            
+
             vm.registers[dest] = c[0] as u32; // Just store something
         }
     });
@@ -84,7 +87,10 @@ fn main() {
     println!("--------------------------------------------------");
     if sgl_time_sec < py_time_sec {
         let speedup = py_time_sec / sgl_time_sec;
-        println!("🏆 ScriptGo Vector Core is {:.2}x FASTER than Python list comprehension!", speedup);
+        println!(
+            "🏆 ScriptGo Vector Core is {:.2}x FASTER than Python list comprehension!",
+            speedup
+        );
     } else {
         let speedup = sgl_time_sec / py_time_sec;
         println!("Python is {:.2}x faster than ScriptGo.", speedup);

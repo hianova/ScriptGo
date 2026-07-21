@@ -1,13 +1,12 @@
-
 #![no_std]
 extern crate alloc;
+pub use no_std_tool::scriptgo_vm::assembler::ScriptAssembler;
 pub use no_std_tool::scriptgo_vm::instruction;
 pub use no_std_tool::scriptgo_vm::vm;
-pub use no_std_tool::scriptgo_vm::assembler::ScriptAssembler;
 pub mod assembler;
 pub mod binary;
-pub mod sync;
 pub mod compiler;
+pub mod sync;
 #[cfg(test)]
 extern crate std;
 #[cfg(test)]
@@ -22,11 +21,11 @@ mod covopt_tests {
         vm.tracing_enabled = true;
         vm.registers[1] = n; // Loop counter
         vm.registers[2] = 1; // Constant 1
-        // Instructions:
-        // 0: JmpIfZero 1 3 0  (If R[1] == 0, jump to Halt at 3)
-        // 1: Sub 1 1 2        (R[1] = R[1] - R[2])
-        // 2: Jmp 0 0 0        (Jump back to 0)
-        // 3: Halt 0 0 0
+                             // Instructions:
+                             // 0: JmpIfZero 1 3 0  (If R[1] == 0, jump to Halt at 3)
+                             // 1: Sub 1 1 2        (R[1] = R[1] - R[2])
+                             // 2: Jmp 0 0 0        (Jump back to 0)
+                             // 3: Halt 0 0 0
         let code = [
             instruction::Instruction::new(instruction::OpCode::JmpIfZero as u8, 1, 3, 0),
             instruction::Instruction::new(instruction::OpCode::Sub as u8, 1, 1, 2),

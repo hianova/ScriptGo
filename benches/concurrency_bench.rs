@@ -37,11 +37,14 @@ impl Gateway {
         }
     }
 
-    #[inline(always)]
     pub fn execute(&self) -> u32 {
         let program = self.script.read();
         let mut vm = ScriptVm::new();
-        vm.run(&program.code[..program.len]).unwrap()
+        match vm.run(&program.code[..program.len]).unwrap() {
+            no_std_tool::scriptgo_vm::vm::VmResult::Halted(val) => val,
+            no_std_tool::scriptgo_vm::vm::VmResult::Yielded(val) => val,
+            _ => 0,
+        }
     }
 
     pub fn hot_reload(&self, source: &str) {

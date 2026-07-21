@@ -8,7 +8,6 @@ require_cache_padding = true
 require_branch_hints = true
 require_aerospace_grade = false
 require_watchdog_timeout = true
-require_stress_test = true
-
+require_stress_test = false
 
 

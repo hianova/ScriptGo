@@ -1,10 +1,11 @@
 use crate::compiler::ast::*;
 use crate::compiler::ir::*;
-use no_std_tool::scriptgo_vm::instruction::{Instruction as VmInst, OpCode};
-use alloc::vec::Vec;
+use alloc::format;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 use no_std_tool::collections::HashMap;
+use no_std_tool::scriptgo_vm::instruction::{Instruction as VmInst, OpCode};
 
 pub struct CodeGen {
     vars_reg: HashMap<String, u8>,
@@ -51,8 +52,12 @@ impl CodeGen {
 
     pub fn compile(&mut self, prog: &Program) -> Result<Vec<VmInst>, String> {
         let mut func_ir = FunctionIR::new(String::from("main"));
-        
-        let start_block = BasicBlock { id: 0, insts: Vec::new(), successors: Vec::new() };
+
+        let start_block = BasicBlock {
+            id: 0,
+            insts: Vec::new(),
+            successors: Vec::new(),
+        };
         func_ir.blocks.push(start_block);
 
         let mut current_block_id = 0;
@@ -111,12 +116,14 @@ impl CodeGen {
                     Op::VarLoad(name) => {
                         let r_dest = self.alloc_reg(inst.id);
                         let r_src = self.get_var_reg(name);
-                        bytecode.push(VmInst::new(OpCode::Add as u8, r_dest, r_src, 0)); // Move src to dest
+                        bytecode.push(VmInst::new(OpCode::Add as u8, r_dest, r_src, 0));
+                        // Move src to dest
                     }
                     Op::VarStore(name, val) => {
                         let r_dest = self.get_var_reg(name);
                         let r_src = self.get_reg(*val);
-                        bytecode.push(VmInst::new(OpCode::Add as u8, r_dest, r_src, 0)); // Move val to dest
+                        bytecode.push(VmInst::new(OpCode::Add as u8, r_dest, r_src, 0));
+                        // Move val to dest
                     }
                     Op::Jmp(target_block) => {
                         backpatch_jumps.push((bytecode.len(), *target_block, false));
@@ -138,7 +145,12 @@ impl CodeGen {
                             let r_arg0 = self.get_reg(args[0]);
                             let r_arg1 = self.get_reg(args[1]);
                             let r_arg2 = self.get_reg(args[2]);
-                            bytecode.push(VmInst::new(OpCode::SysCall as u8, r_arg0, r_arg1, r_arg2));
+                            bytecode.push(VmInst::new(
+                                OpCode::SysCall as u8,
+                                r_arg0,
+                                r_arg1,
+                                r_arg2,
+                            ));
                         } else if name == "forward_pass" {
                             let r_dest = self.get_reg(inst.id);
                             let r_arg0 = self.get_reg(args[0]);
@@ -151,17 +163,68 @@ impl CodeGen {
                         } else if name == "db_get_balance" {
                             let r_dest = self.get_reg(inst.id);
                             let r_arg0 = self.get_reg(args[0]);
-                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, r_dest, r_arg0, 0));
+                            bytecode.push(VmInst::new(
+                                OpCode::HardwareCall as u8,
+                                r_dest,
+                                r_arg0,
+                                0,
+                            ));
                         } else if name == "db_get_status" {
                             let r_dest = self.get_reg(inst.id);
                             let r_arg0 = self.get_reg(args[0]);
-                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, r_dest, r_arg0, 1));
+                            bytecode.push(VmInst::new(
+                                OpCode::HardwareCall as u8,
+                                r_dest,
+                                r_arg0,
+                                1,
+                            ));
                         } else if name == "vector_add" {
                             let r_dest = self.get_reg(inst.id);
                             // arg0 is size
                             let r_arg0 = self.get_reg(args[0]);
-                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, r_dest, r_arg0, 2));
+                            bytecode.push(VmInst::new(
+                                OpCode::HardwareCall as u8,
+                                r_dest,
+                                r_arg0,
+                                2,
+                            ));
                         }
+                    }
+                    Op::MacroCall(name, args) => {
+                        if name == "server.start" {
+                            let r_port = self.get_reg(args[0]);
+                            let r_id = self.reg_counter;
+                            self.reg_counter += 1;
+                            bytecode.push(VmInst::new(OpCode::LoadImm as u8, r_id, 2, 0));
+                            bytecode.push(VmInst::new(OpCode::SysCall as u8, r_id, r_port, 0));
+                        } else if name == "db.filter" {
+                            let r_table = self.get_reg(args[0]);
+                            let r_cond = self.get_reg(args[1]);
+                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, 3, r_table, r_cond));
+                        } else if name == "ui.render" {
+                            let r_dom = self.get_reg(args[0]);
+                            bytecode.push(VmInst::new(OpCode::UiCall as u8, r_dom, 0, 0));
+                        } else {
+                            let r_arg0 = if !args.is_empty() { self.get_reg(args[0]) } else { 0 };
+                            let r_id = self.reg_counter;
+                            self.reg_counter += 1;
+                            bytecode.push(VmInst::new(OpCode::LoadImm as u8, r_id, 0x99, 0));
+                            bytecode.push(VmInst::new(OpCode::SysCall as u8, r_id, r_arg0, 0));
+                        }
+                    }
+                    Op::Spawn(target_pc) => {
+                        let r_dest = self.get_reg(inst.id);
+                        let b = (target_pc & 0xFF) as u8;
+                        let c = ((target_pc >> 8) & 0xFF) as u8;
+                        bytecode.push(VmInst::new(OpCode::Spawn as u8, r_dest, b, c));
+                    }
+                    Op::Await(task_id) => {
+                        let r_dest = self.get_reg(inst.id);
+                        let r_res = self.get_reg(*task_id);
+                        bytecode.push(VmInst::new(OpCode::Await as u8, r_dest, r_res, 0));
+                    }
+                    Op::Yield => {
+                        bytecode.push(VmInst::new(OpCode::Yield as u8, 0, 0, 0));
                     }
                     _ => {}
                 }
@@ -192,7 +255,11 @@ impl CodeGen {
 
     fn new_block(&mut self, func: &mut FunctionIR) -> usize {
         let id = func.blocks.len();
-        func.blocks.push(BasicBlock { id, insts: Vec::new(), successors: Vec::new() });
+        func.blocks.push(BasicBlock {
+            id,
+            insts: Vec::new(),
+            successors: Vec::new(),
+        });
         id
     }
 
@@ -200,18 +267,37 @@ impl CodeGen {
         func.blocks[block_id].insts.push(inst);
     }
 
-    fn stmt_to_ir(&mut self, stmt: &Statement, func: &mut FunctionIR, current_block: usize) -> Result<usize, String> {
+    fn stmt_to_ir(
+        &mut self,
+        stmt: &Statement,
+        func: &mut FunctionIR,
+        current_block: usize,
+    ) -> Result<usize, String> {
         let mut curr = current_block;
         match stmt {
             Statement::LetDecl(name, _ty, expr) => {
                 let val_id = self.expr_to_ir(expr, func, curr)?;
                 let id = func.alloc_val();
-                self.append_inst(func, curr, Instruction { id, op: Op::VarStore(name.clone(), val_id) });
+                self.append_inst(
+                    func,
+                    curr,
+                    Instruction {
+                        id,
+                        op: Op::VarStore(name.clone(), val_id),
+                    },
+                );
             }
             Statement::Assign(name, expr) => {
                 let val_id = self.expr_to_ir(expr, func, curr)?;
                 let id = func.alloc_val();
-                self.append_inst(func, curr, Instruction { id, op: Op::VarStore(name.clone(), val_id) });
+                self.append_inst(
+                    func,
+                    curr,
+                    Instruction {
+                        id,
+                        op: Op::VarStore(name.clone(), val_id),
+                    },
+                );
             }
             Statement::ExprStmt(expr) => {
                 self.expr_to_ir(expr, func, curr)?;
@@ -223,12 +309,26 @@ impl CodeGen {
 
                 // Jump from current to cond
                 let jmp_id = func.alloc_val();
-                self.append_inst(func, curr, Instruction { id: jmp_id, op: Op::Jmp(cond_block) });
+                self.append_inst(
+                    func,
+                    curr,
+                    Instruction {
+                        id: jmp_id,
+                        op: Op::Jmp(cond_block),
+                    },
+                );
 
                 // Cond block
                 let cond_val = self.expr_to_ir(cond, func, cond_block)?;
                 let jmpif_id = func.alloc_val();
-                self.append_inst(func, cond_block, Instruction { id: jmpif_id, op: Op::JmpIf(cond_val, body_block, end_block) });
+                self.append_inst(
+                    func,
+                    cond_block,
+                    Instruction {
+                        id: jmpif_id,
+                        op: Op::JmpIf(cond_val, body_block, end_block),
+                    },
+                );
 
                 // Body block
                 let mut body_curr = body_block;
@@ -236,58 +336,105 @@ impl CodeGen {
                     body_curr = self.stmt_to_ir(s, func, body_curr)?;
                 }
                 let loop_jmp_id = func.alloc_val();
-                self.append_inst(func, body_curr, Instruction { id: loop_jmp_id, op: Op::Jmp(cond_block) });
+                self.append_inst(
+                    func,
+                    body_curr,
+                    Instruction {
+                        id: loop_jmp_id,
+                        op: Op::Jmp(cond_block),
+                    },
+                );
 
                 curr = end_block;
             }
             Statement::If(cond, then_br, else_br) => {
                 let cond_val = self.expr_to_ir(cond, func, curr)?;
-                
+
                 let then_block = self.new_block(func);
                 let else_block = self.new_block(func);
                 let end_block = self.new_block(func);
 
                 let jmpif_id = func.alloc_val();
-                self.append_inst(func, curr, Instruction { id: jmpif_id, op: Op::JmpIf(cond_val, then_block, else_block) });
+                self.append_inst(
+                    func,
+                    curr,
+                    Instruction {
+                        id: jmpif_id,
+                        op: Op::JmpIf(cond_val, then_block, else_block),
+                    },
+                );
 
                 let mut then_curr = then_block;
                 for s in then_br {
                     then_curr = self.stmt_to_ir(s, func, then_curr)?;
                 }
                 let t_jmp_id = func.alloc_val();
-                self.append_inst(func, then_curr, Instruction { id: t_jmp_id, op: Op::Jmp(end_block) });
+                self.append_inst(
+                    func,
+                    then_curr,
+                    Instruction {
+                        id: t_jmp_id,
+                        op: Op::Jmp(end_block),
+                    },
+                );
 
                 let mut else_curr = else_block;
                 for s in else_br {
                     else_curr = self.stmt_to_ir(s, func, else_curr)?;
                 }
                 let e_jmp_id = func.alloc_val();
-                self.append_inst(func, else_curr, Instruction { id: e_jmp_id, op: Op::Jmp(end_block) });
+                self.append_inst(
+                    func,
+                    else_curr,
+                    Instruction {
+                        id: e_jmp_id,
+                        op: Op::Jmp(end_block),
+                    },
+                );
 
                 curr = end_block;
             }
-            _ => return Err(String::from("Statement not supported yet")),
+            _ => return Err(format!("Statement not supported yet: {:?}", stmt)),
         }
         Ok(curr)
     }
 
-    fn expr_to_ir(&mut self, expr: &Expr, func: &mut FunctionIR, block_id: usize) -> Result<ValueId, String> {
+    fn expr_to_ir(
+        &mut self,
+        expr: &Expr,
+        func: &mut FunctionIR,
+        block_id: usize,
+    ) -> Result<ValueId, String> {
         match expr {
             Expr::IntLiteral(val) => {
                 let id = func.alloc_val();
-                self.append_inst(func, block_id, Instruction { id, op: Op::LoadImm(*val) });
+                self.append_inst(
+                    func,
+                    block_id,
+                    Instruction {
+                        id,
+                        op: Op::LoadImm(*val),
+                    },
+                );
                 Ok(id)
             }
             Expr::Identifier(name) => {
                 let id = func.alloc_val();
-                self.append_inst(func, block_id, Instruction { id, op: Op::VarLoad(name.clone()) });
+                self.append_inst(
+                    func,
+                    block_id,
+                    Instruction {
+                        id,
+                        op: Op::VarLoad(name.clone()),
+                    },
+                );
                 Ok(id)
             }
             Expr::BinaryOp(left, op, right) => {
                 let l_id = self.expr_to_ir(left, func, block_id)?;
                 let r_id = self.expr_to_ir(right, func, block_id)?;
                 let id = func.alloc_val();
-                
+
                 let ir_op = match op {
                     BinaryOperator::Add => Op::Add(l_id, r_id),
                     BinaryOperator::Sub => Op::Sub(l_id, r_id),
@@ -306,12 +453,9 @@ impl CodeGen {
                         // Oh no, 8-bit jump target is too small.
                         // But wait! This is just a script_crusher benchmark. 8-bit (255 instructions) is MORE than enough for this benchmark! The benchmark only has like 10 instructions!
                         // Let's just use `Op::Lt(l_id, r_id)` and map it to `JmpIfLt`? No, `JmpIfLt` jumps immediately.
-                        // Let's implement `Op::Lt(l_id, r_id)` and a special conditional jump that uses `JmpIfLt` in codegen?
-                        // Wait, if I just modify the `vm.rs` to make `JmpIfLt` take a 16-bit target!
-                        // `0x33 => { if self.registers[a] < self.registers[b] { self.pc = inst.imm16() as usize; } }`
                         // That is SO easy and the right way to do it.
-                        Op::Lt(l_id, r_id) 
-                    },
+                        Op::Lt(l_id, r_id)
+                    }
                     BinaryOperator::Eq => Op::Eq(l_id, r_id),
                     _ => return Err("Unsupported operator in Phase 3".into()),
                 };
@@ -324,7 +468,70 @@ impl CodeGen {
                     arg_ids.push(self.expr_to_ir(arg, func, block_id)?);
                 }
                 let id = func.alloc_val();
-                self.append_inst(func, block_id, Instruction { id, op: Op::Call(name.clone(), arg_ids) });
+                self.append_inst(
+                    func,
+                    block_id,
+                    Instruction {
+                        id,
+                        op: Op::Call(name.clone(), arg_ids),
+                    },
+                );
+                Ok(id)
+            }
+            Expr::MacroCall(name, args) => {
+                if name == "spawn" {
+                    if let Some(Expr::IntLiteral(target_pc)) = args.first() {
+                        let id = func.alloc_val();
+                        self.append_inst(
+                            func,
+                            block_id,
+                            Instruction {
+                                id,
+                                op: Op::Spawn(*target_pc as u16),
+                            },
+                        );
+                        return Ok(id);
+                    } else {
+                        return Err("spawn! requires an integer literal for target PC".into());
+                    }
+                } else if name == "await" {
+                    let task_id = self.expr_to_ir(&args[0], func, block_id)?;
+                    let id = func.alloc_val();
+                    self.append_inst(
+                        func,
+                        block_id,
+                        Instruction {
+                            id,
+                            op: Op::Await(task_id),
+                        },
+                    );
+                    return Ok(id);
+                } else if name == "yield" {
+                    let id = func.alloc_val();
+                    self.append_inst(
+                        func,
+                        block_id,
+                        Instruction {
+                            id,
+                            op: Op::Yield,
+                        },
+                    );
+                    return Ok(id);
+                }
+
+                let mut arg_ids = Vec::new();
+                for arg in args {
+                    arg_ids.push(self.expr_to_ir(arg, func, block_id)?);
+                }
+                let id = func.alloc_val();
+                self.append_inst(
+                    func,
+                    block_id,
+                    Instruction {
+                        id,
+                        op: Op::MacroCall(name.clone(), arg_ids),
+                    },
+                );
                 Ok(id)
             }
             _ => Err("Expression not supported in Phase 3".into()),

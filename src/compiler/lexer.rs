@@ -13,25 +13,26 @@ pub enum Token {
     Else,
     While,
     Return,
-    Equal,       // =
-    EqualEqual,  // ==
-    Plus,        // +
-    Minus,       // -
-    Star,        // *
-    Slash,       // /
-    Percent,     // %
-    Lt,          // <
-    Gt,          // >
-    LParen,      // (
-    RParen,      // )
-    LBrace,      // {
-    RBrace,      // }
-    LBracket,    // [
-    RBracket,    // ]
-    Comma,       // ,
-    Colon,       // :
-    Semicolon,   // ;
-    Dot,         // .
+    Equal,      // =
+    EqualEqual, // ==
+    Plus,       // +
+    Minus,      // -
+    Star,       // *
+    Slash,      // /
+    Percent,    // %
+    Lt,         // <
+    Gt,         // >
+    LParen,     // (
+    RParen,     // )
+    LBrace,     // {
+    RBrace,     // }
+    LBracket,   // [
+    RBracket,   // ]
+    Comma,      // ,
+    Colon,      // :
+    Semicolon,  // ;
+    Dot,        // .
+    Bang,       // !
     EOF,
 }
 
@@ -68,26 +69,93 @@ impl<'a> Lexer<'a> {
 
         self.skip_whitespace();
         while self.position < self.input.len() {
-            let Some(c) = self.current_char() else { break; };
+            let Some(c) = self.current_char() else {
+                break;
+            };
 
             match c {
-                '+' => { tokens.push(Token::Plus); self.advance(); },
-                '-' => { tokens.push(Token::Minus); self.advance(); },
-                '*' => { tokens.push(Token::Star); self.advance(); },
-                '/' => { tokens.push(Token::Slash); self.advance(); },
-                '%' => { tokens.push(Token::Percent); self.advance(); },
-                '<' => { tokens.push(Token::Lt); self.advance(); },
-                '>' => { tokens.push(Token::Gt); self.advance(); },
-                '(' => { tokens.push(Token::LParen); self.advance(); },
-                ')' => { tokens.push(Token::RParen); self.advance(); },
-                '{' => { tokens.push(Token::LBrace); self.advance(); },
-                '}' => { tokens.push(Token::RBrace); self.advance(); },
-                '[' => { tokens.push(Token::LBracket); self.advance(); },
-                ']' => { tokens.push(Token::RBracket); self.advance(); },
-                ',' => { tokens.push(Token::Comma); self.advance(); },
-                ':' => { tokens.push(Token::Colon); self.advance(); },
-                ';' => { tokens.push(Token::Semicolon); self.advance(); },
-                '.' => { tokens.push(Token::Dot); self.advance(); },
+                '+' => {
+                    tokens.push(Token::Plus);
+                    self.advance();
+                }
+                '-' => {
+                    tokens.push(Token::Minus);
+                    self.advance();
+                }
+                '*' => {
+                    tokens.push(Token::Star);
+                    self.advance();
+                }
+                '/' => {
+                    self.advance();
+                    if self.current_char() == Some('/') {
+                        // comment
+                        while let Some(ch) = self.current_char() {
+                            if ch == '\n' {
+                                break;
+                            }
+                            self.advance();
+                        }
+                    } else {
+                        tokens.push(Token::Slash);
+                    }
+                }
+                '%' => {
+                    tokens.push(Token::Percent);
+                    self.advance();
+                }
+                '<' => {
+                    tokens.push(Token::Lt);
+                    self.advance();
+                }
+                '>' => {
+                    tokens.push(Token::Gt);
+                    self.advance();
+                }
+                '(' => {
+                    tokens.push(Token::LParen);
+                    self.advance();
+                }
+                ')' => {
+                    tokens.push(Token::RParen);
+                    self.advance();
+                }
+                '{' => {
+                    tokens.push(Token::LBrace);
+                    self.advance();
+                }
+                '}' => {
+                    tokens.push(Token::RBrace);
+                    self.advance();
+                }
+                '[' => {
+                    tokens.push(Token::LBracket);
+                    self.advance();
+                }
+                ']' => {
+                    tokens.push(Token::RBracket);
+                    self.advance();
+                }
+                ',' => {
+                    tokens.push(Token::Comma);
+                    self.advance();
+                }
+                ':' => {
+                    tokens.push(Token::Colon);
+                    self.advance();
+                }
+                ';' => {
+                    tokens.push(Token::Semicolon);
+                    self.advance();
+                }
+                '.' => {
+                    tokens.push(Token::Dot);
+                    self.advance();
+                }
+                '!' => {
+                    tokens.push(Token::Bang);
+                    self.advance();
+                }
                 '=' => {
                     self.advance();
                     if self.current_char() == Some('=') {
@@ -151,7 +219,9 @@ impl<'a> Lexer<'a> {
                         _ => tokens.push(Token::Identifier(ident)),
                     }
                 }
-                _ => { self.advance(); }
+                _ => {
+                    self.advance();
+                }
             }
             self.skip_whitespace();
         }

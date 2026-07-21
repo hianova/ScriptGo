@@ -1,6 +1,5 @@
 use crate::instruction::{Instruction, OpCode};
 use alloc::vec::Vec;
-use no_std_tool::opcode;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AsmError {
@@ -114,6 +113,7 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use no_std_tool::opcode;
 
     #[test]
     fn test_valid_parse() {

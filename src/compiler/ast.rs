@@ -1,6 +1,6 @@
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::boxed::Box;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -22,11 +22,19 @@ pub enum Expr {
     MethodCall(Box<Expr>, String, Vec<Expr>), // For method chaining (SQL replacement)
     Call(String, Vec<Expr>),
     ArrayLit(Vec<Expr>),
+    MacroCall(String, Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinaryOperator {
-    Add, Sub, Mul, Div, Mod, Eq, Lt, Gt,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Lt,
+    Gt,
 }
 
 #[derive(Debug, Clone, PartialEq)]
