@@ -41,8 +41,8 @@ impl Gateway {
         let program = self.script.read();
         let mut vm = ScriptVm::new();
         match vm.run(&program.code[..program.len]).unwrap() {
-            no_std_tool::scriptgo_vm::vm::VmResult::Halted(val) => val,
-            no_std_tool::scriptgo_vm::vm::VmResult::Yielded(val) => val,
+            script_go::sgl::vm::VmResult::Halted(val) => val,
+            script_go::sgl::vm::VmResult::Yielded(val) => val,
             _ => 0,
         }
     }

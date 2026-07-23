@@ -1,5 +1,5 @@
-use no_std_tool::scriptgo_vm::assembler::ScriptAssembler;
-use no_std_tool::scriptgo_vm::vm::{ScriptVm, VmResult};
+use script_go::sgl::assembler::ScriptAssembler;
+use script_go::sgl::vm::{ScriptVm, VmResult};
 use std::time::Instant;
 
 fn main() {

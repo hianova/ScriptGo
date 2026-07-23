@@ -1,5 +1,5 @@
-use no_std_tool::scriptgo_vm::assembler::ScriptAssembler;
-use no_std_tool::scriptgo_vm::vm::{ScriptVm, VmResult};
+use script_go::sgl::assembler::ScriptAssembler;
+use script_go::sgl::vm::{ScriptVm, VmResult};
 use std::time::Instant;
 
 fn main() {
@@ -35,31 +35,31 @@ fn main() {
     // num_floats is 100,000 (0x186A0)
     asm.load_imm(0, 0x01);
     asm.load_imm(10, 16);
-    asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(15, 0, 0, 10)); // Shl R[0] = R[0] << 16
+    asm.emit(script_go::sgl::instruction::Instruction::new(15, 0, 0, 10)); // Shl R[0] = R[0] << 16
     asm.load_imm16(11, 0x86A0);
-    asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(13, 0, 0, 11)); // Or R[0] = R[0] | R[11]
+    asm.emit(script_go::sgl::instruction::Instruction::new(13, 0, 0, 11)); // Or R[0] = R[0] | R[11]
     
     // Set up addresses
     let _base_addr = 0x8000_0000u32;
     // R[2] = src1 addr
     asm.load_imm16(2, 0x8000);
-    asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(15, 2, 2, 10)); // Shl R[2] = R[2] << 16
+    asm.emit(script_go::sgl::instruction::Instruction::new(15, 2, 2, 10)); // Shl R[2] = R[2] << 16
     // R[2] is now 0x8000_0000 (src1)
     
     // R[3] = src2 addr = R[2] + byte_size
     // Load byte_size into R[4]
     // byte_size is 400_000 = 0x61A80.
     asm.load_imm(4, 0x06);
-    asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(15, 4, 4, 10)); // Shl R[4] = R[4] << 16
+    asm.emit(script_go::sgl::instruction::Instruction::new(15, 4, 4, 10)); // Shl R[4] = R[4] << 16
     asm.load_imm16(5, 0x1A80);
-    asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(13, 4, 4, 5)); // Or R[4] = R[4] | R[5]
+    asm.emit(script_go::sgl::instruction::Instruction::new(13, 4, 4, 5)); // Or R[4] = R[4] | R[5]
     // R[4] is now byte_size
     
     // R[3] = R[2] + R[4] (src2)
-    asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(3, 3, 2, 4)); // Add R[3] = R[2] + R[4]
+    asm.emit(script_go::sgl::instruction::Instruction::new(3, 3, 2, 4)); // Add R[3] = R[2] + R[4]
     
     // R[5] = R[3] + R[4] (dest)
-    asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(3, 5, 3, 4)); // Add R[5] = R[3] + R[4]
+    asm.emit(script_go::sgl::instruction::Instruction::new(3, 5, 3, 4)); // Add R[5] = R[3] + R[4]
     
     // Now VecAdd!
     // dest = R[5], src1 = R[2], src2 = R[3]

@@ -1,5 +1,5 @@
-use no_std_tool::scriptgo_vm::assembler::ScriptAssembler;
-use no_std_tool::scriptgo_vm::vm::{ScriptVm, VmResult};
+use script_go::sgl::assembler::ScriptAssembler;
+use script_go::sgl::vm::{ScriptVm, VmResult};
 use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
@@ -23,7 +23,7 @@ fn main() {
     // Pad with NOPs until PC = 100
     let current_len = 4;
     for _ in 0..(100 - current_len) {
-        asm.emit(no_std_tool::scriptgo_vm::instruction::Instruction::new(0, 0, 0, 0));
+        asm.emit(script_go::sgl::instruction::Instruction::new(0, 0, 0, 0));
     }
 
     // -- CHILD TASK (PC = 100) --
@@ -112,13 +112,13 @@ fn main() {
                 vm.registers[dest_reg as usize] = new_id;
                 run_queue.push_back(current_id); // reschedule parent
             }
-            Ok(no_std_tool::scriptgo_vm::vm::VmResult::Awaiting(s, res_id, dest_reg)) => {
+            Ok(script_go::sgl::vm::VmResult::Awaiting(s, res_id, dest_reg)) => {
                 steps_total += s;
                 println!("Task {} Awaiting Resource {}.", current_id, res_id);
                 waiting.insert(current_id, (res_id, dest_reg));
                 run_queue.push_back(current_id); // parent is blocked
             }
-            Ok(no_std_tool::scriptgo_vm::vm::VmResult::MmapRequest(_, _)) => {
+            Ok(script_go::sgl::vm::VmResult::MmapRequest(_, _)) => {
                 // Not supported
             }
             Err(e) => {

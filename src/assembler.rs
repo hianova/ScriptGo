@@ -113,7 +113,7 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use no_std_tool::opcode;
+    use crate::opcode;
 
     #[test]
     fn test_valid_parse() {

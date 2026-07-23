@@ -5,7 +5,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use no_std_tool::collections::HashMap;
-use no_std_tool::scriptgo_vm::instruction::{Instruction as VmInst, OpCode};
+use crate::sgl::instruction::{Instruction as VmInst, OpCode};
 
 pub struct CodeGen {
     vars_reg: HashMap<String, u8>,
@@ -240,7 +240,7 @@ impl CodeGen {
                 let low = (target_pc & 0xFF) as u8;
                 let high = ((target_pc >> 8) & 0xFF) as u8;
                 if is_cond {
-                    let r_cond = no_std_tool::inst_a!(bytecode[idx]) as u8;
+                    let r_cond = crate::inst_a!(bytecode[idx]) as u8;
                     bytecode[idx] = VmInst::new(OpCode::JmpIfZero as u8, r_cond, low, high);
                 } else {
                     bytecode[idx] = VmInst::new(OpCode::Jmp as u8, 0, low, high);

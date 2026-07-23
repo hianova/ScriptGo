@@ -1,5 +1,5 @@
-use no_std_tool::scriptgo_vm::assembler::ScriptAssembler;
-use no_std_tool::scriptgo_vm::vm::{ScriptVm, VmResult};
+use script_go::sgl::assembler::ScriptAssembler;
+use script_go::sgl::vm::{ScriptVm, VmResult};
 use std::time::Instant;
 
 fn main() {
@@ -23,8 +23,8 @@ fn main() {
     asm.halt();
 
     let mut code = asm.build();
-    code[3] = no_std_tool::scriptgo_vm::instruction::Instruction::new(
-        no_std_tool::scriptgo_vm::instruction::OpCode::JmpIfEq as u8,
+    code[3] = script_go::sgl::instruction::Instruction::new(
+        script_go::sgl::instruction::OpCode::JmpIfEq as u8,
         0,
         1,
         end_addr as u8,

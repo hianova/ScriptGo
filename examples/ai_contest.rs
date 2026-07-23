@@ -1,3 +1,4 @@
+#![allow(unused_assignments, clippy::assign_op_pattern)]
 use std::process::Command;
 use std::time::Instant;
 
@@ -38,7 +39,7 @@ fn main() {
     }
 
     let mut val_result = 0;
-    no_std_tool::sgl_compile!(r#"
+    script_go::sgl_compile!(r#"
         let i: Int = 0;
         let val: Int = 1;
         while i < 1000000 {

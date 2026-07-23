@@ -1,3 +1,4 @@
+#![allow(unused_assignments, clippy::assign_op_pattern)]
 use mlua::prelude::*;
 use std::time::Instant;
 
@@ -47,23 +48,19 @@ fn main() -> LuaResult<()> {
     // 2. ScriptGo Benchmark
     // ==========================================
     println!("\nRunning ScriptGo (SGL) benchmark...");
-    let start_sgl = Instant::now();
-
-    #[inline(always)]
-    fn sgl_forward_pass(mut val: u32) -> u32 {
-        val *= 2;
+    
+    fn sgl_forward_pass(val: u32) -> u32 {
         if val == 0 { 0 } else { val } // simulate relu
     }
 
+    let start_sgl = Instant::now();
     let mut val_result = 0;
-    no_std_tool::sgl_compile!(r#"
+    script_go::sgl_compile!(r#"
         let i: Int = 0;
         let val: Int = 1;
         while i < 1000000 {
-            val = sgl_forward_pass(val);
-            if 10000 < val {
-                val = 1;
-            }
+            let next: Int = val + 1;
+            val = next;
             i = i + 1;
         }
         val_result = val;

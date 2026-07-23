@@ -1,3 +1,4 @@
+#![allow(unused_assignments, clippy::assign_op_pattern)]
 use std::process::Command;
 use std::time::Instant;
 
@@ -34,8 +35,8 @@ fn main() {
     let steps = 600;
     
     let mut positions_y = vec![0.0f64; num_objects];
-    for i in 0..num_objects {
-        positions_y[i] = (i % 100) as f64 + 10.0;
+    for (i, pos_y) in positions_y.iter_mut().enumerate().take(num_objects) {
+        *pos_y = (i % 100) as f64 + 10.0;
     }
     let mut velocities_y = vec![0.0f64; num_objects];
     
@@ -46,7 +47,7 @@ fn main() {
     let start_sgl = Instant::now();
     
     for _ in 0..steps {
-        no_std_tool::sgl_compile!(r#"
+        script_go::sgl_compile!(r#"
             let i: usize = 0;
             while i < 100000 {
                 let vy: Float = velocities_y[i];

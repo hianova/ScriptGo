@@ -1,8 +1,10 @@
 #![no_std]
 extern crate alloc;
-pub use no_std_tool::scriptgo_vm::assembler::ScriptAssembler;
-pub use no_std_tool::scriptgo_vm::instruction;
-pub use no_std_tool::scriptgo_vm::vm;
+pub mod sgl;
+pub use sgl::assembler::ScriptAssembler;
+pub use sgl::instruction;
+pub use sgl::vm;
+pub use sgl_macros::sgl_compile;
 pub mod assembler;
 pub mod binary;
 pub mod compiler;

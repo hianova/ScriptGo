@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::time::Instant;
 use std::hint::black_box;
 use tokio::time::{sleep, Duration};

@@ -1,4 +1,4 @@
-use no_std_tool::scriptgo_vm::vm::{ScriptVm, VmResult};
+use script_go::sgl::vm::{ScriptVm, VmResult};
 use script_go::compiler::codegen::CodeGen;
 use script_go::compiler::lexer::Lexer;
 use script_go::compiler::parser::Parser;
