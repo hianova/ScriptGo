@@ -475,12 +475,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            let res = val1 + val2;
-                            core::ptr::write_unaligned(dest_ptr.add(i * 4) as *mut [u8; 4], res.to_le_bytes());
-                        }
+                        crate::sgl::simd_ops::simd_vec_add(len, src1_ptr, src2_ptr, dest_ptr);
                     }
                 }
                 40 => { // VecMul
@@ -492,12 +487,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            let res = val1 * val2;
-                            core::ptr::write_unaligned(dest_ptr.add(i * 4) as *mut [u8; 4], res.to_le_bytes());
-                        }
+                        crate::sgl::simd_ops::simd_vec_mul(len, src1_ptr, src2_ptr, dest_ptr);
                     }
                 }
                 41 => { // VecDot
@@ -508,12 +498,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        let mut sum = 0.0f32;
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            sum += val1 * val2;
-                        }
+                        let sum = crate::sgl::simd_ops::simd_vec_dot(len, src1_ptr, src2_ptr);
                         self.registers[dest_reg] = sum.to_bits();
                     }
                 }
@@ -845,12 +830,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            let res = val1 + val2;
-                            core::ptr::write_unaligned(dest_ptr.add(i * 4) as *mut [u8; 4], res.to_le_bytes());
-                        }
+                        crate::sgl::simd_ops::simd_vec_add(len, src1_ptr, src2_ptr, dest_ptr);
                     }
                 }
                 40 => { // VecMul
@@ -862,12 +842,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            let res = val1 * val2;
-                            core::ptr::write_unaligned(dest_ptr.add(i * 4) as *mut [u8; 4], res.to_le_bytes());
-                        }
+                        crate::sgl::simd_ops::simd_vec_mul(len, src1_ptr, src2_ptr, dest_ptr);
                     }
                 }
                 41 => { // VecDot
@@ -878,12 +853,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        let mut sum = 0.0f32;
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            sum += val1 * val2;
-                        }
+                        let sum = crate::sgl::simd_ops::simd_vec_dot(len, src1_ptr, src2_ptr);
                         self.registers[dest_reg] = sum.to_bits();
                     }
                 }
@@ -1233,12 +1203,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            let res = val1 + val2;
-                            core::ptr::write_unaligned(dest_ptr.add(i * 4) as *mut [u8; 4], res.to_le_bytes());
-                        }
+                        crate::sgl::simd_ops::simd_vec_add(len, src1_ptr, src2_ptr, dest_ptr);
                     }
                     mem_change = Some((dest as u16, len as u32));
                 }
@@ -1251,12 +1216,7 @@ impl ScriptVm {
                     let src1_ptr = self.get_ptr(src1, len * 4)?;
                     let src2_ptr = self.get_ptr(src2, len * 4)?;
                     unsafe {
-                        for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
-                            let res = val1 * val2;
-                            core::ptr::write_unaligned(dest_ptr.add(i * 4) as *mut [u8; 4], res.to_le_bytes());
-                        }
+                        crate::sgl::simd_ops::simd_vec_mul(len, src1_ptr, src2_ptr, dest_ptr);
                     }
                     mem_change = Some((dest as u16, len as u32));
                 }
