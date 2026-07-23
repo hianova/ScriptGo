@@ -60,12 +60,11 @@ To prove this architecture's superiority over Electron and React Native, we ran 
 - **`examples/markdown_notes`**: The hell-level validation product demonstrating 10,000 items virtual scrolling and zero-downtime OTA logic swaps.
 - **`examples/benchmarks`**: Contains Python, JS, R, and SQLite comparative scripts to run against `ai_contest`, `db_contest`, `r_contest`, and `chromium_contest`.
 
-## 🌐 Ecosystem Domination (ScriptGo vs Python / SQL / R / V8)
+## 🌐 Ecosystem Capabilities
 
-By embodying the **"Thick Host, Thin Script"** philosophy, ScriptGo crushes existing runtimes via zero-overhead `NeuralCall`, `DbCall`, and `HardwareCall` FFI instructions.
+By embodying the **"Thick Host, Thin Script"** philosophy, ScriptGo crushes existing runtimes via zero-overhead `NeuralCall` and `DbCall` FFI instructions.
 
 1. **AI Tensor Loop (vs Python)**: ScriptGo is **9.2x faster** than a native Python AI training loop. SGL operates entirely without GIL or dynamic typing bottlenecks.
 2. **Embedded DB Filter (vs SQL)**: ScriptGo executes 1,000,000 virtual machine instructions for custom data filtering in just **100ms**! Perfect for replacing heavy PL/SQL stored procedures.
-3. **SIMD Vector Math (vs R/Python)**: SGL delegates 10,000,000 element array additions to Rust Host via `HardwareCall`, completing the task **1,837x faster** than Python list comprehensions.
-4. **V8 Engine Comparison**: Compared to Node.js V8 execution, SGL achieves a staggering **4500x speedup** on raw computation loops.
-5. **UI Framework Comparison (vs Brave 1.69 / Chrome 147)**: According to 2026 Tech Insider benchmarks, Brave uses 1.8 GB RAM and Chrome uses 2.6 GB for 20 tabs. In stark contrast, `sgl-browser` runs a pure Rust `macroquad` rendering loop driven by the zero-allocation SGL VM, utilizing **< 50MB of RAM**. This represents a staggering **~50x reduction in memory footprint**. Furthermore, while Chrome struggles with synthetic JS micro-benchmarks (Speedometer score ~128), SGL operates at a `2.2 ns` instruction dispatch speed—literally bypassing browser DOM overhead entirely via direct OS SysCalls (`0x52` for file dialogs). SGL completely redefines "Lightweight".
+
+*(Note: The internal codebase and macro ecosystem use the `sgl` namespace, which stands for **ScriptGo Language**.)*
