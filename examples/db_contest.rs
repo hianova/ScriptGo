@@ -1,4 +1,7 @@
+#![allow(unused_imports)]
 #![allow(dead_code)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use std::process::Command;
 use std::time::Instant;
 
@@ -43,11 +46,11 @@ fn main() {
 
     // 2. Setup Rust DB & Benchmark ScriptGo
     println!("\nPopulating Rust In-Memory DB with 1,000,000 rows...");
-    let mut db = Vec::with_capacity(1_000_000);
-    for i in 0..1_000_000 {
+    let mut db = Vec::with_capacity(covopt_macro::covopt_param!("M_49_36", 1000000));
+    for i in 0..covopt_macro::covopt_param!("M_50_16", 1000000) {
         db.push(Record {
             id: i,
-            balance: (i * 17) % 5000,
+            balance: (i * covopt_macro::covopt_param!("M_53_26", 17)) % covopt_macro::covopt_param!("M_53_32", 5000),
             status: i % 2,
         });
     }
@@ -79,7 +82,7 @@ fn main() {
     use script_go::vm::ScriptVm;
 
     let mut lexer = Lexer::new(sgl_code);
-    let tokens = lexer.tokenize();
+    let tokens = lexer.tokenize().unwrap();
     let mut parser = Parser::new(tokens);
     let ast = parser.parse().unwrap();
     let mut codegen = CodeGen::new();
@@ -99,14 +102,14 @@ fn main() {
         let id = vm.registers[src];
         if op == 0 {
             // get_balance
-            vm.registers[dest] = (id * 17) % 5000;
+            vm.registers[dest] = (id * covopt_macro::covopt_param!("M_105_39", 17)) % covopt_macro::covopt_param!("M_105_45", 5000);
         } else if op == 1 {
             // get_status
             vm.registers[dest] = id % 2;
         }
     });
 
-    vm.max_steps = Some(50_000_000);
+    vm.max_steps = Some(covopt_macro::covopt_param!("M_112_24", 50000000));
     let _ = vm.run(&bytecode);
 
     let sgl_duration = start_sgl.elapsed();

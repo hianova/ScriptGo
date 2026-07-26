@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use std::process::Command;
 use std::time::Instant;
 
@@ -49,7 +52,7 @@ fn main() {
     use script_go::vm::ScriptVm;
 
     let mut lexer = Lexer::new(sgl_code);
-    let tokens = lexer.tokenize();
+    let tokens = lexer.tokenize().unwrap();
     let mut parser = Parser::new(tokens);
     let ast = parser.parse().unwrap();
     let mut codegen = CodeGen::new();
@@ -77,7 +80,7 @@ fn main() {
         }
     });
 
-    vm.max_steps = Some(1_000_000);
+    vm.max_steps = Some(covopt_param!("M_85_24", 1000000));
     let _ = vm.run(&bytecode);
 
     let sgl_duration = start_sgl.elapsed();

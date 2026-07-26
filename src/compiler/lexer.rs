@@ -1,5 +1,21 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
+use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+}
+
+impl Position {
+    pub fn new(line: usize, column: usize) -> Self {
+        Self { line, column }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
@@ -22,6 +38,14 @@ pub enum Token {
     Percent,    // %
     Lt,         // <
     Gt,         // >
+    Le,         // <=
+    Ge,         // >=
+    NotEqual,   // !=
+    AndAnd,     // &&
+    OrOr,       // ||
+    Arrow,      // ->
+    PlusEqual,  // +=
+    MinusEqual, // -=
     LParen,     // (
     RParen,     // )
     LBrace,     // {
@@ -36,167 +60,364 @@ pub enum Token {
     EOF,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpannedToken {
+    pub token: Token,
+    pub pos: Position,
+}
+
 pub struct Lexer<'a> {
-    input: &'a str,
-    position: usize,
+    _input: &'a str,
+    chars: Vec<(usize, char)>, // (byte_offset, char)
+    index: usize,
+    line: usize,
+    column: usize,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
-        Self { input, position: 0 }
+        let chars: Vec<(usize, char)> = input.char_indices().collect();
+        Self {
+            _input: input,
+            chars,
+            index: 0,
+            line: 1,
+            column: 1,
+        }
     }
 
     fn current_char(&self) -> Option<char> {
-        self.input.chars().nth(self.position)
+        self.chars.get(self.index).map(|&(_, c)| c)
     }
 
-    fn advance(&mut self) {
-        self.position += 1;
+    fn peek_char(&self) -> Option<char> {
+        self.chars.get(self.index + 1).map(|&(_, c)| c)
     }
 
-    fn skip_whitespace(&mut self) {
+    fn current_pos(&self) -> Position {
+        Position::new(self.line, self.column)
+    }
+
+    fn advance(&mut self) -> Option<char> {
+        if let Some(&(_, c)) = self.chars.get(self.index) {
+            self.index += 1;
+            if c == '\n' {
+                self.line += 1;
+                self.column = 1;
+            } else {
+                self.column += 1;
+            }
+            Some(c)
+        } else {
+            None
+        }
+    }
+
+    fn skip_whitespace_and_comments(&mut self) -> Result<(), String> {
         while let Some(c) = self.current_char() {
             if c.is_whitespace() {
                 self.advance();
+            } else if c == '/' && self.peek_char() == Some('/') {
+                // Line comment
+                self.advance(); // consume '/'
+                self.advance(); // consume '/'
+                while let Some(ch) = self.current_char() {
+                    if ch == '\n' {
+                        self.advance();
+                        break;
+                    }
+                    self.advance();
+                }
+            } else if c == '/' && self.peek_char() == Some('*') {
+                // Block comment
+                let start_pos = self.current_pos();
+                self.advance(); // consume '/'
+                self.advance(); // consume '*'
+                let mut closed = false;
+                while let Some(ch) = self.current_char() {
+                    if ch == '*' && self.peek_char() == Some('/') {
+                        self.advance(); // consume '*'
+                        self.advance(); // consume '/'
+                        closed = true;
+                        break;
+                    }
+                    self.advance();
+                }
+                if !closed {
+                    return Err(format!(
+                        "Syntax error at line {}, column {}: Unterminated block comment",
+                        start_pos.line, start_pos.column
+                    ));
+                }
             } else {
                 break;
             }
         }
+        Ok(())
     }
 
-    pub fn tokenize(&mut self) -> Vec<Token> {
+    pub fn tokenize(&mut self) -> Result<Vec<SpannedToken>, String> {
         let mut tokens = Vec::new();
 
-        self.skip_whitespace();
-        while self.position < self.input.len() {
-            let Some(c) = self.current_char() else {
-                break;
+        self.skip_whitespace_and_comments()?;
+        while self.index < self.chars.len() {
+            let pos = self.current_pos();
+            let c = match self.current_char() {
+                Some(ch) => ch,
+                None => break,
             };
 
             match c {
                 '+' => {
-                    tokens.push(Token::Plus);
                     self.advance();
+                    if self.current_char() == Some('=') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::PlusEqual, pos });
+                    } else {
+                        tokens.push(SpannedToken { token: Token::Plus, pos });
+                    }
                 }
                 '-' => {
-                    tokens.push(Token::Minus);
                     self.advance();
+                    if self.current_char() == Some('>') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::Arrow, pos });
+                    } else if self.current_char() == Some('=') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::MinusEqual, pos });
+                    } else {
+                        tokens.push(SpannedToken { token: Token::Minus, pos });
+                    }
                 }
                 '*' => {
-                    tokens.push(Token::Star);
                     self.advance();
+                    tokens.push(SpannedToken { token: Token::Star, pos });
                 }
                 '/' => {
                     self.advance();
-                    if self.current_char() == Some('/') {
-                        // comment
-                        while let Some(ch) = self.current_char() {
-                            if ch == '\n' {
-                                break;
-                            }
-                            self.advance();
-                        }
-                    } else {
-                        tokens.push(Token::Slash);
-                    }
+                    tokens.push(SpannedToken { token: Token::Slash, pos });
                 }
                 '%' => {
-                    tokens.push(Token::Percent);
                     self.advance();
+                    tokens.push(SpannedToken { token: Token::Percent, pos });
                 }
                 '<' => {
-                    tokens.push(Token::Lt);
                     self.advance();
+                    if self.current_char() == Some('=') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::Le, pos });
+                    } else {
+                        tokens.push(SpannedToken { token: Token::Lt, pos });
+                    }
                 }
                 '>' => {
-                    tokens.push(Token::Gt);
                     self.advance();
-                }
-                '(' => {
-                    tokens.push(Token::LParen);
-                    self.advance();
-                }
-                ')' => {
-                    tokens.push(Token::RParen);
-                    self.advance();
-                }
-                '{' => {
-                    tokens.push(Token::LBrace);
-                    self.advance();
-                }
-                '}' => {
-                    tokens.push(Token::RBrace);
-                    self.advance();
-                }
-                '[' => {
-                    tokens.push(Token::LBracket);
-                    self.advance();
-                }
-                ']' => {
-                    tokens.push(Token::RBracket);
-                    self.advance();
-                }
-                ',' => {
-                    tokens.push(Token::Comma);
-                    self.advance();
-                }
-                ':' => {
-                    tokens.push(Token::Colon);
-                    self.advance();
-                }
-                ';' => {
-                    tokens.push(Token::Semicolon);
-                    self.advance();
-                }
-                '.' => {
-                    tokens.push(Token::Dot);
-                    self.advance();
-                }
-                '!' => {
-                    tokens.push(Token::Bang);
-                    self.advance();
+                    if self.current_char() == Some('=') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::Ge, pos });
+                    } else {
+                        tokens.push(SpannedToken { token: Token::Gt, pos });
+                    }
                 }
                 '=' => {
                     self.advance();
                     if self.current_char() == Some('=') {
-                        tokens.push(Token::EqualEqual);
                         self.advance();
+                        tokens.push(SpannedToken { token: Token::EqualEqual, pos });
                     } else {
-                        tokens.push(Token::Equal);
+                        tokens.push(SpannedToken { token: Token::Equal, pos });
                     }
                 }
-                '"' => {
+                '!' => {
                     self.advance();
+                    if self.current_char() == Some('=') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::NotEqual, pos });
+                    } else {
+                        tokens.push(SpannedToken { token: Token::Bang, pos });
+                    }
+                }
+                '&' => {
+                    self.advance();
+                    if self.current_char() == Some('&') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::AndAnd, pos });
+                    } else {
+                        return Err(format!(
+                            "Syntax error at line {}, column {}: Unrecognized character '&'",
+                            pos.line, pos.column
+                        ));
+                    }
+                }
+                '|' => {
+                    self.advance();
+                    if self.current_char() == Some('|') {
+                        self.advance();
+                        tokens.push(SpannedToken { token: Token::OrOr, pos });
+                    } else {
+                        return Err(format!(
+                            "Syntax error at line {}, column {}: Unrecognized character '|'",
+                            pos.line, pos.column
+                        ));
+                    }
+                }
+                '(' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::LParen, pos });
+                }
+                ')' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::RParen, pos });
+                }
+                '{' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::LBrace, pos });
+                }
+                '}' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::RBrace, pos });
+                }
+                '[' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::LBracket, pos });
+                }
+                ']' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::RBracket, pos });
+                }
+                ',' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::Comma, pos });
+                }
+                ':' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::Colon, pos });
+                }
+                ';' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::Semicolon, pos });
+                }
+                '.' => {
+                    self.advance();
+                    tokens.push(SpannedToken { token: Token::Dot, pos });
+                }
+                '"' => {
+                    self.advance(); // consume opening quote
                     let mut s = String::new();
+                    let mut terminated = false;
                     while let Some(ch) = self.current_char() {
                         if ch == '"' {
                             self.advance();
+                            terminated = true;
                             break;
+                        } else if ch == '\\' {
+                            self.advance();
+                            match self.current_char() {
+                                Some('"') => {
+                                    s.push('"');
+                                    self.advance();
+                                }
+                                Some('\\') => {
+                                    s.push('\\');
+                                    self.advance();
+                                }
+                                Some('n') => {
+                                    s.push('\n');
+                                    self.advance();
+                                }
+                                Some('t') => {
+                                    s.push('\t');
+                                    self.advance();
+                                }
+                                Some('r') => {
+                                    s.push('\r');
+                                    self.advance();
+                                }
+                                Some('0') => {
+                                    s.push('\0');
+                                    self.advance();
+                                }
+                                Some(other) => {
+                                    return Err(format!(
+                                        "Syntax error at line {}, column {}: Invalid escape sequence '\\{}'",
+                                        self.line, self.column, other
+                                    ));
+                                }
+                                None => {
+                                    return Err(format!(
+                                        "Syntax error at line {}, column {}: Unterminated string literal",
+                                        pos.line, pos.column
+                                    ));
+                                }
+                            }
+                        } else {
+                            s.push(ch);
+                            self.advance();
                         }
-                        s.push(ch);
-                        self.advance();
                     }
-                    tokens.push(Token::StringLiteral(s));
+                    if !terminated {
+                        return Err(format!(
+                            "Syntax error at line {}, column {}: Unterminated string literal",
+                            pos.line, pos.column
+                        ));
+                    }
+                    tokens.push(SpannedToken {
+                        token: Token::StringLiteral(s),
+                        pos,
+                    });
                 }
                 _ if c.is_ascii_digit() => {
-                    let mut num = String::new();
-                    let mut is_float = false;
+                    let mut num_str = String::new();
+                    let mut dot_count = 0;
+
                     while let Some(ch) = self.current_char() {
                         if ch.is_ascii_digit() {
-                            num.push(ch);
+                            num_str.push(ch);
                             self.advance();
                         } else if ch == '.' {
-                            is_float = true;
-                            num.push(ch);
-                            self.advance();
+                            if self.peek_char().is_some_and(|next_c| next_c.is_ascii_digit()) {
+                                dot_count += 1;
+                                num_str.push(ch);
+                                self.advance();
+                            } else {
+                                break;
+                            }
                         } else {
                             break;
                         }
                     }
-                    if is_float {
-                        tokens.push(Token::FloatLiteral(num.parse().unwrap_or(0.0)));
+
+                    if dot_count == 0 {
+                        match num_str.parse::<i64>() {
+                            Ok(v) => tokens.push(SpannedToken {
+                                token: Token::IntLiteral(v),
+                                pos,
+                            }),
+                            Err(_) => {
+                                return Err(format!(
+                                    "Syntax error at line {}, column {}: Invalid integer literal '{}'",
+                                    pos.line, pos.column, num_str
+                                ));
+                            }
+                        }
+                    } else if dot_count == 1 {
+                        match num_str.parse::<f64>() {
+                            Ok(v) => tokens.push(SpannedToken {
+                                token: Token::FloatLiteral(v),
+                                pos,
+                            }),
+                            Err(_) => {
+                                return Err(format!(
+                                    "Syntax error at line {}, column {}: Malformed float literal '{}'",
+                                    pos.line, pos.column, num_str
+                                ));
+                            }
+                        }
                     } else {
-                        tokens.push(Token::IntLiteral(num.parse().unwrap_or(0)));
+                        return Err(format!(
+                            "Syntax error at line {}, column {}: Malformed float literal '{}'",
+                            pos.line, pos.column, num_str
+                        ));
                     }
                 }
                 _ if c.is_alphabetic() || c == '_' => {
@@ -209,23 +430,32 @@ impl<'a> Lexer<'a> {
                             break;
                         }
                     }
-                    match ident.as_str() {
-                        "let" => tokens.push(Token::Let),
-                        "fn" => tokens.push(Token::Fn),
-                        "if" => tokens.push(Token::If),
-                        "else" => tokens.push(Token::Else),
-                        "while" => tokens.push(Token::While),
-                        "return" => tokens.push(Token::Return),
-                        _ => tokens.push(Token::Identifier(ident)),
-                    }
+                    let tok = match ident.as_str() {
+                        "let" => Token::Let,
+                        "fn" => Token::Fn,
+                        "if" => Token::If,
+                        "else" => Token::Else,
+                        "while" => Token::While,
+                        "return" => Token::Return,
+                        _ => Token::Identifier(ident),
+                    };
+                    tokens.push(SpannedToken { token: tok, pos });
                 }
                 _ => {
-                    self.advance();
+                    return Err(format!(
+                        "Syntax error at line {}, column {}: Unrecognized character '{}'",
+                        pos.line, pos.column, c
+                    ));
                 }
             }
-            self.skip_whitespace();
+            self.skip_whitespace_and_comments()?;
         }
-        tokens.push(Token::EOF);
-        tokens
+
+        let eof_pos = self.current_pos();
+        tokens.push(SpannedToken {
+            token: Token::EOF,
+            pos: eof_pos,
+        });
+        Ok(tokens)
     }
 }

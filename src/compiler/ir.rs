@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -12,8 +15,17 @@ pub enum Op {
     Sub(ValueId, ValueId),
     Mul(ValueId, ValueId),
     Div(ValueId, ValueId),
+    Mod(ValueId, ValueId),
     Eq(ValueId, ValueId),
+    Ne(ValueId, ValueId),
     Lt(ValueId, ValueId),
+    Gt(ValueId, ValueId),
+    Le(ValueId, ValueId),
+    Ge(ValueId, ValueId),
+    And(ValueId, ValueId),
+    Or(ValueId, ValueId),
+    ShiftLeft(ValueId, ValueId),
+    ShiftRight(ValueId, ValueId),
 
     // SSA specific operations
     Phi(Vec<(ValueId, usize)>), // Block id

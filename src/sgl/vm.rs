@@ -1,3 +1,7 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
+use alloc::boxed::Box;
 use crate::sgl::instruction::Instruction;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde :: Serialize, serde :: Deserialize)]
 #[repr(C, align(64))]
@@ -43,8 +47,12 @@ pub struct ScriptVm {
     pub print_handler: Option<fn(u32)>,
     pub neural_handler: Option<fn(&mut ScriptVm, usize, usize, usize)>,
     pub syscall_handler: Option<fn(u32, u32, u32)>,
+    pub syscall_handlers: alloc::vec::Vec<fn(&mut ScriptVm, usize, usize, usize)>,
     pub ui_handler: Option<UiHandler>,
     pub hardware_handler: Option<fn(&mut ScriptVm, usize, usize, usize)>,
+    pub hardware_handlers: alloc::vec::Vec<fn(&mut ScriptVm, usize, usize, usize)>,
+    pub host_context: Option<crate::sgl::host_handlers::HostContext>,
+    pub ui_dispatcher: Option<crate::sgl::ui_engine::UiDispatcher>,
     pub abort_flag: Option<fn() -> bool>,
     pub debug_hook: Option<fn(&ScriptVm, Instruction)>,
     pub memory: [u8; 1024],
@@ -65,15 +73,15 @@ impl Default for ScriptVm {
 impl ScriptVm {
     #[inline(always)]
     pub fn get_ptr(&self, addr: usize, len: usize) -> Result<*const u8, VmError> {
-        if addr < 1024 {
-            if addr + len <= 1024 {
+        if addr < covopt_param!("M_76_18", 1024) {
+            if addr.checked_add(len).is_some_and(|end| end <= covopt_param!("M_77_62", 1024)) {
                 Ok(self.memory.as_ptr().wrapping_add(addr))
             } else {
                 Err(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr })
             }
-        } else if addr >= 0x8000_0000 {
-            let offset = addr - 0x8000_0000;
-            if offset + len <= self.mmap_len {
+        } else if addr >= covopt_param!("M_82_26", 2147483648) {
+            let offset = addr - covopt_param!("M_83_32", 2147483648);
+            if offset.checked_add(len).is_some_and(|end| end <= self.mmap_len) {
                 Ok((self.mmap_ptr + offset) as *const u8)
             } else {
                 Err(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr })
@@ -85,15 +93,15 @@ impl ScriptVm {
 
     #[inline(always)]
     pub fn get_mut_ptr(&mut self, addr: usize, len: usize) -> Result<*mut u8, VmError> {
-        if addr < 1024 {
-            if addr + len <= 1024 {
+        if addr < covopt_param!("M_96_18", 1024) {
+            if addr.checked_add(len).is_some_and(|end| end <= covopt_param!("M_97_62", 1024)) {
                 Ok(self.memory.as_mut_ptr().wrapping_add(addr))
             } else {
                 Err(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr })
             }
-        } else if addr >= 0x8000_0000 {
-            let offset = addr - 0x8000_0000;
-            if offset + len <= self.mmap_len {
+        } else if addr >= covopt_param!("M_102_26", 2147483648) {
+            let offset = addr - covopt_param!("M_103_32", 2147483648);
+            if offset.checked_add(len).is_some_and(|end| end <= self.mmap_len) {
                 Ok((self.mmap_ptr + offset) as *mut u8)
             } else {
                 Err(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr })
@@ -112,6 +120,112 @@ impl ScriptVm {
         }
         Ok(())
     }
+
+    pub fn register_host_context(&mut self, context: crate::sgl::host_handlers::HostContext) {
+        self.host_context = Some(context);
+    }
+
+    pub fn register_syscall_handler(&mut self, handler: fn(u32, u32, u32)) {
+        self.syscall_handler = Some(handler);
+    }
+
+    pub fn register_syscall_handler_ext(&mut self, handler: fn(&mut ScriptVm, usize, usize, usize)) {
+        if !self.syscall_handlers.contains(&handler) {
+            self.syscall_handlers.push(handler);
+        }
+    }
+
+    pub fn register_hardware_handler(&mut self, handler: fn(&mut ScriptVm, usize, usize, usize)) {
+        if !self.hardware_handlers.contains(&handler) {
+            self.hardware_handlers.push(handler);
+        }
+        self.hardware_handler = Some(handler);
+    }
+
+    pub fn register_print_handler(&mut self, handler: fn(u32)) {
+        self.print_handler = Some(handler);
+    }
+
+    pub fn get_host_context(&self) -> Option<&crate::sgl::host_handlers::HostContext> {
+        self.host_context.as_ref()
+    }
+
+    pub fn get_host_context_mut(&mut self) -> Option<&mut crate::sgl::host_handlers::HostContext> {
+        self.host_context.as_mut()
+    }
+
+    pub fn register_ui_dispatcher(&mut self, dispatcher: crate::sgl::ui_engine::UiDispatcher) {
+        self.ui_dispatcher = Some(dispatcher);
+    }
+
+    pub fn get_ui_dispatcher(&self) -> Option<&crate::sgl::ui_engine::UiDispatcher> {
+        self.ui_dispatcher.as_ref()
+    }
+
+    pub fn get_ui_dispatcher_mut(&mut self) -> Option<&mut crate::sgl::ui_engine::UiDispatcher> {
+        self.ui_dispatcher.as_mut()
+    }
+
+    pub fn read_bytes(&self, addr: usize, len: usize, until_null: bool) -> Result<alloc::vec::Vec<u8>, VmError> {
+        if until_null {
+            let mut result = alloc::vec::Vec::new();
+            let mut cur = addr;
+            loop {
+                let ptr = self.get_ptr(cur, 1)?;
+                let byte = unsafe { *ptr };
+                if byte == 0 {
+                    break;
+                }
+                result.push(byte);
+                cur += 1;
+            }
+            Ok(result)
+        } else {
+            let ptr = self.get_ptr(addr, len)?;
+            let slice = unsafe { core::slice::from_raw_parts(ptr, len) };
+            Ok(slice.to_vec())
+        }
+    }
+
+    pub fn read_string(&self, addr: usize, max_len: Option<usize>) -> Result<alloc::string::String, VmError> {
+        let limit = max_len.unwrap_or(covopt_param!("M_191_38", 1024));
+        self.get_ptr(addr, 1)?;
+        let mut bytes = alloc::vec::Vec::new();
+        for cur in addr..addr.saturating_add(limit) {
+            let ptr = match self.get_ptr(cur, 1) {
+                Ok(p) => p,
+                Err(_) => break,
+            };
+            let byte = unsafe { *ptr };
+            if byte == 0 {
+                break;
+            }
+            bytes.push(byte);
+        }
+        alloc::string::String::from_utf8(bytes)
+            .map_err(|_| VmError::MemoryAccessOutOfBounds { pc: self.pc, addr })
+    }
+
+    pub fn write_bytes(&mut self, addr: usize, data: &[u8]) -> Result<(), VmError> {
+        let ptr = self.get_mut_ptr(addr, data.len())?;
+        unsafe {
+            core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
+        }
+        Ok(())
+    }
+
+    pub fn write_string(&mut self, addr: usize, text: &str, null_terminate: bool) -> Result<usize, VmError> {
+        let bytes = text.as_bytes();
+        let total_len = if null_terminate { bytes.len() + 1 } else { bytes.len() };
+        let ptr = self.get_mut_ptr(addr, total_len)?;
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
+            if null_terminate {
+                *ptr.add(bytes.len()) = 0;
+            }
+        }
+        Ok(total_len)
+    }
     pub fn new() -> Self {
         Self {
             registers: [0; 256],
@@ -121,14 +235,18 @@ impl ScriptVm {
             print_handler: None,
             neural_handler: None,
             syscall_handler: None,
+            syscall_handlers: alloc::vec::Vec::new(),
             ui_handler: None,
             hardware_handler: None,
+            hardware_handlers: alloc::vec::Vec::new(),
+            host_context: None,
+            ui_dispatcher: None,
             abort_flag: None,
             debug_hook: None,
             memory: [0; 1024],
             mmap_ptr: 0,
             mmap_len: 0,
-            max_steps: Some(10000),
+            max_steps: Some(covopt_param!("M_249_28", 10000)),
             tracing_enabled: false,
             trace_buffer: [TraceStep {
                 pc: 0,
@@ -141,13 +259,38 @@ impl ScriptVm {
             _tracker: no_std_tool::debug::ScopedResource::new(),
         }
     }
+
+    pub fn new_with_max_steps(max_steps: u32) -> Self {
+        let mut vm = Self::new();
+        vm.max_steps = Some(max_steps);
+        vm
+    }
+
+    pub fn new_boxed() -> Box<Self> {
+        unsafe {
+            let layout = core::alloc::Layout::new::<Self>();
+            let ptr = alloc::alloc::alloc_zeroed(layout) as *mut Self;
+            if ptr.is_null() {
+                alloc::alloc::handle_alloc_error(layout);
+            }
+            core::ptr::addr_of_mut!((*ptr).max_steps).write(Some(covopt_param!("M_276_65", 10000)));
+            core::ptr::addr_of_mut!((*ptr)._tracker).write(no_std_tool::debug::ScopedResource::new());
+            Box::from_raw(ptr)
+        }
+    }
+
+    pub fn new_boxed_with_max_steps(max_steps: u32) -> Box<Self> {
+        let mut vm = Self::new_boxed();
+        vm.max_steps = Some(max_steps);
+        vm
+    }
     #[doc = " Reset ephemeral execution context (PC, SP, call stack, R[0..16]) while preserving"]
     #[doc = " memory and persistent registers R[16..256] across code reloads (similar to React Fast Refresh)."]
     pub fn hot_reload(&mut self) {
         self.pc = 0;
         self.sp = 0;
         self.call_stack = [0; 64];
-        for i in 0..16 {
+        for i in 0..covopt_param!("M_293_20", 16) {
             self.registers[i] = 0;
         }
     }
@@ -168,8 +311,8 @@ impl ScriptVm {
                 mem_change,
             };
             self.trace_buffer[self.trace_head] = step;
-            self.trace_head = (self.trace_head + 1) % 1024;
-            if self.trace_count < 1024 {
+            self.trace_head = (self.trace_head + 1) % covopt_param!("M_314_54", 1024);
+            if self.trace_count < covopt_param!("M_315_34", 1024) {
                 self.trace_count += 1;
             }
         }
@@ -191,10 +334,12 @@ impl ScriptVm {
     #[inline(always)]
     pub fn run_fast(&mut self, code: &[Instruction]) -> Result<VmResult, VmError> {
         // self.pc is intentionally NOT reset to 0 here to support resuming from Yield
-        self.sp = 0;
+        if self.pc == 0 {
+            self.sp = 0;
+        }
         let mut steps = 0;
         let max_steps = self.max_steps.unwrap_or(u32::MAX);
-        let poll_mask = no_std_tool::covopt_param!("watchdog_poll_mask", 0xFFu32, 0x01u32..=0xFFFu32);
+        let poll_mask = covopt_param!("M_342_24", 255);
         loop {
             if (steps & poll_mask) == 0 {
                 if unlikely(steps >= max_steps) {
@@ -352,7 +497,7 @@ impl ScriptVm {
                     }
                 }
                 26 => {
-                    if self.sp < 64 {
+                    if self.sp < covopt_param!("M_500_33", 64) {
                         self.call_stack[self.sp] = self.pc;
                         self.sp += 1;
                         self.pc = crate::inst_imm16!(inst) as usize;
@@ -374,11 +519,30 @@ impl ScriptVm {
                     }
                 }
                 29 => {
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    let dest_idx = a % covopt_param!("M_525_39", 256);
+                    let init_val = self.registers[dest_idx];
+
+                    if self.host_context.is_some() {
+                        let mut context = self.host_context.take().unwrap();
+                        context.dispatch_syscall(self, a, b, c);
+                        self.host_context = Some(context);
+                    }
+                    if self.registers[dest_idx] == init_val {
+                        for handler in self.syscall_handlers.clone() {
+                            handler(self, a, b, c);
+                            if self.registers[dest_idx] != init_val {
+                                break;
+                            }
+                        }
+                    }
                     if let Some(handler) = self.syscall_handler {
                         handler(
-                            self.registers[crate::inst_a!(inst)],
-                            self.registers[crate::inst_b!(inst)],
-                            self.registers[crate::inst_c!(inst)],
+                            self.registers[a],
+                            self.registers[b],
+                            self.registers[c],
                         );
                     }
                 }
@@ -386,11 +550,11 @@ impl ScriptVm {
                     let addr = self.registers[crate::inst_b!(inst)]
                         .wrapping_add(self.registers[crate::inst_c!(inst)])
                         as usize;
-                    let ptr = self.get_ptr(addr, 4)?;
+                    let ptr = self.get_ptr(addr, covopt_param!("M_553_49", 4))?;
                     let mut val = 0u32;
                     unsafe {
-                        for i in 0..4 {
-                            val |= (*ptr.add(i) as u32) << (i * 8);
+                        for i in 0..covopt_param!("M_556_36", 4) {
+                            val |= (*ptr.add(i) as u32) << (i * covopt_param!("M_557_64", 8));
                         }
                     }
                     self.registers[crate::inst_a!(inst)] = val;
@@ -399,11 +563,11 @@ impl ScriptVm {
                     let addr = self.registers[crate::inst_b!(inst)]
                         .wrapping_add(self.registers[crate::inst_c!(inst)])
                         as usize;
-                    let ptr = self.get_mut_ptr(addr, 4)?;
+                    let ptr = self.get_mut_ptr(addr, covopt_param!("M_566_53", 4))?;
                     let val = self.registers[crate::inst_a!(inst)];
                     unsafe {
-                        for i in 0..4 {
-                            *ptr.add(i) = ((val >> (i * 8)) & 0xFF) as u8;
+                        for i in 0..covopt_param!("M_569_36", 4) {
+                            *ptr.add(i) = ((val >> (i * covopt_param!("M_570_56", 8))) & covopt_param!("M_570_62", 255)) as u8;
                         }
                     }
                 }
@@ -424,32 +588,49 @@ impl ScriptVm {
                     }
                 }
                 34 => {
-                    let val = (self.registers[crate::inst_b!(inst)] & 0xFF) as i8;
+                    let val = (self.registers[crate::inst_b!(inst)] & covopt_param!("M_591_70", 255)) as i8;
                     if let Some(res) = no_std_tool::math::silu_approx_i8(val) {
-                        self.registers[crate::inst_a!(inst)] = (res as u32) & 0xFF;
+                        self.registers[crate::inst_a!(inst)] = (res as u32) & covopt_param!("M_593_78", 255);
                     } else {
                         return Err(VmError::MathError { pc: self.pc - 1 });
                     }
                 }
                 35 => {
-                    if let Some(handler) = self.hardware_handler {
-                        handler(
-                            self,
-                            crate::inst_a!(inst),
-                            crate::inst_b!(inst),
-                            crate::inst_c!(inst),
-                        );
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    let dest_idx = a % covopt_param!("M_602_39", 256);
+                    let init_val = self.registers[dest_idx];
+                    if self.host_context.is_some() {
+                        let mut context = self.host_context.take().unwrap();
+                        context.dispatch_hardware_call(self, a, b, c);
+                        self.host_context = Some(context);
+                    }
+                    if self.registers[dest_idx] == init_val {
+                        for handler in self.hardware_handlers.clone() {
+                            handler(self, a, b, c);
+                            if self.registers[dest_idx] != init_val {
+                                break;
+                            }
+                        }
+                        if self.registers[dest_idx] == init_val
+                            && let Some(handler) = self.hardware_handler
+                        {
+                            handler(self, a, b, c);
+                        }
                     }
                 }
                 36 => {
-                    let cmd = crate::inst_b!(inst);
-                    if crate::inst_a!(inst) == 0 || !(1..=4).contains(&cmd) {
-                    } else if let Some(handler) = self.ui_handler {
-                        handler(
-                            crate::inst_a!(inst),
-                            crate::inst_b!(inst),
-                            crate::inst_c!(inst),
-                        );
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    if self.ui_dispatcher.is_some() {
+                        let mut dispatcher = self.ui_dispatcher.take().unwrap();
+                        let _ = dispatcher.dispatch(self, a, b, c);
+                        self.ui_dispatcher = Some(dispatcher);
+                    }
+                    if let Some(handler) = self.ui_handler {
+                        handler(a, b, c);
                     }
                 }
                 37 => {
@@ -471,9 +652,10 @@ impl ScriptVm {
                     let dest = self.registers[crate::inst_a!(inst)] as usize;
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let dest_ptr = self.get_mut_ptr(dest, len * 4)?;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_655_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: dest })?;
+                    let dest_ptr = self.get_mut_ptr(dest, byte_len)?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         crate::sgl::simd_ops::simd_vec_add(len, src1_ptr, src2_ptr, dest_ptr);
                     }
@@ -483,9 +665,10 @@ impl ScriptVm {
                     let dest = self.registers[crate::inst_a!(inst)] as usize;
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let dest_ptr = self.get_mut_ptr(dest, len * 4)?;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_668_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: dest })?;
+                    let dest_ptr = self.get_mut_ptr(dest, byte_len)?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         crate::sgl::simd_ops::simd_vec_mul(len, src1_ptr, src2_ptr, dest_ptr);
                     }
@@ -495,8 +678,9 @@ impl ScriptVm {
                     let dest_reg = crate::inst_a!(inst);
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_681_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: src1 })?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         let sum = crate::sgl::simd_ops::simd_vec_dot(len, src1_ptr, src2_ptr);
                         self.registers[dest_reg] = sum.to_bits();
@@ -549,10 +733,12 @@ impl ScriptVm {
         N: FnMut(&mut ScriptVm, usize, usize, usize),
     {
         // self.pc is NOT reset to 0 to support Yield
-        self.sp = 0;
+        if self.pc == 0 {
+            self.sp = 0;
+        }
         let mut steps = 0;
         let max_steps = self.max_steps.unwrap_or(u32::MAX);
-        let poll_mask = no_std_tool::covopt_param!("watchdog_poll_mask", 0xFFu32, 0x01u32..=0xFFFu32);
+        let poll_mask = covopt_param!("M_741_24", 255);
         loop {
             if (steps & poll_mask) == 0 {
                 if unlikely(steps >= max_steps) {
@@ -710,7 +896,7 @@ impl ScriptVm {
                     }
                 }
                 26 => {
-                    if self.sp < 64 {
+                    if self.sp < covopt_param!("M_899_33", 64) {
                         self.call_stack[self.sp] = self.pc;
                         self.sp += 1;
                         self.pc = crate::inst_imm16!(inst) as usize;
@@ -732,11 +918,30 @@ impl ScriptVm {
                     }
                 }
                 29 => {
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    let dest_idx = a % covopt_param!("M_924_39", 256);
+                    let init_val = self.registers[dest_idx];
+
+                    if self.host_context.is_some() {
+                        let mut context = self.host_context.take().unwrap();
+                        context.dispatch_syscall(self, a, b, c);
+                        self.host_context = Some(context);
+                    }
+                    if self.registers[dest_idx] == init_val {
+                        for handler in self.syscall_handlers.clone() {
+                            handler(self, a, b, c);
+                            if self.registers[dest_idx] != init_val {
+                                break;
+                            }
+                        }
+                    }
                     if let Some(handler) = self.syscall_handler {
                         handler(
-                            self.registers[crate::inst_a!(inst)],
-                            self.registers[crate::inst_b!(inst)],
-                            self.registers[crate::inst_c!(inst)],
+                            self.registers[a],
+                            self.registers[b],
+                            self.registers[c],
                         );
                     }
                 }
@@ -744,11 +949,11 @@ impl ScriptVm {
                     let addr = self.registers[crate::inst_b!(inst)]
                         .wrapping_add(self.registers[crate::inst_c!(inst)])
                         as usize;
-                    let ptr = self.get_ptr(addr, 4)?;
+                    let ptr = self.get_ptr(addr, covopt_param!("M_952_49", 4))?;
                     let mut val = 0u32;
                     unsafe {
-                        for i in 0..4 {
-                            val |= (*ptr.add(i) as u32) << (i * 8);
+                        for i in 0..covopt_param!("M_955_36", 4) {
+                            val |= (*ptr.add(i) as u32) << (i * covopt_param!("M_956_64", 8));
                         }
                     }
                     self.registers[crate::inst_a!(inst)] = val;
@@ -757,11 +962,11 @@ impl ScriptVm {
                     let addr = self.registers[crate::inst_b!(inst)]
                         .wrapping_add(self.registers[crate::inst_c!(inst)])
                         as usize;
-                    let ptr = self.get_mut_ptr(addr, 4)?;
+                    let ptr = self.get_mut_ptr(addr, covopt_param!("M_965_53", 4))?;
                     let val = self.registers[crate::inst_a!(inst)];
                     unsafe {
-                        for i in 0..4 {
-                            *ptr.add(i) = ((val >> (i * 8)) & 0xFF) as u8;
+                        for i in 0..covopt_param!("M_968_36", 4) {
+                            *ptr.add(i) = ((val >> (i * covopt_param!("M_969_56", 8))) & covopt_param!("M_969_62", 255)) as u8;
                         }
                     }
                 }
@@ -782,32 +987,50 @@ impl ScriptVm {
                     }
                 }
                 34 => {
-                    let val = (self.registers[crate::inst_b!(inst)] & 0xFF) as i8;
+                    let val = (self.registers[crate::inst_b!(inst)] & covopt_param!("M_990_70", 255)) as i8;
                     if let Some(res) = no_std_tool::math::silu_approx_i8(val) {
-                        self.registers[crate::inst_a!(inst)] = (res as u32) & 0xFF;
+                        self.registers[crate::inst_a!(inst)] = (res as u32) & covopt_param!("M_992_78", 255);
                     } else {
                         return Err(VmError::MathError { pc: self.pc - 1 });
                     }
                 }
                 35 => {
-                    if let Some(handler) = self.hardware_handler {
-                        handler(
-                            self,
-                            crate::inst_a!(inst),
-                            crate::inst_b!(inst),
-                            crate::inst_c!(inst),
-                        );
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    let dest_idx = a % covopt_param!("M_1001_39", 256);
+                    let init_val = self.registers[dest_idx];
+
+                    if self.host_context.is_some() {
+                        let mut context = self.host_context.take().unwrap();
+                        context.dispatch_hardware_call(self, a, b, c);
+                        self.host_context = Some(context);
+                    }
+                    if self.registers[dest_idx] == init_val {
+                        for handler in self.hardware_handlers.clone() {
+                            handler(self, a, b, c);
+                            if self.registers[dest_idx] != init_val {
+                                break;
+                            }
+                        }
+                        if self.registers[dest_idx] == init_val
+                            && let Some(handler) = self.hardware_handler
+                        {
+                            handler(self, a, b, c);
+                        }
                     }
                 }
                 36 => {
-                    let cmd = crate::inst_b!(inst);
-                    if crate::inst_a!(inst) == 0 || !(1..=4).contains(&cmd) {
-                    } else if let Some(handler) = self.ui_handler {
-                        handler(
-                            crate::inst_a!(inst),
-                            crate::inst_b!(inst),
-                            crate::inst_c!(inst),
-                        );
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    if self.ui_dispatcher.is_some() {
+                        let mut dispatcher = self.ui_dispatcher.take().unwrap();
+                        let _ = dispatcher.dispatch(self, a, b, c);
+                        self.ui_dispatcher = Some(dispatcher);
+                    }
+                    if let Some(handler) = self.ui_handler {
+                        handler(a, b, c);
                     }
                 }
                 37 => {
@@ -826,9 +1049,10 @@ impl ScriptVm {
                     let dest = self.registers[crate::inst_a!(inst)] as usize;
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let dest_ptr = self.get_mut_ptr(dest, len * 4)?;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_1052_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: dest })?;
+                    let dest_ptr = self.get_mut_ptr(dest, byte_len)?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         crate::sgl::simd_ops::simd_vec_add(len, src1_ptr, src2_ptr, dest_ptr);
                     }
@@ -838,9 +1062,10 @@ impl ScriptVm {
                     let dest = self.registers[crate::inst_a!(inst)] as usize;
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let dest_ptr = self.get_mut_ptr(dest, len * 4)?;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_1065_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: dest })?;
+                    let dest_ptr = self.get_mut_ptr(dest, byte_len)?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         crate::sgl::simd_ops::simd_vec_mul(len, src1_ptr, src2_ptr, dest_ptr);
                     }
@@ -850,8 +1075,9 @@ impl ScriptVm {
                     let dest_reg = crate::inst_a!(inst);
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_1078_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: src1 })?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         let sum = crate::sgl::simd_ops::simd_vec_dot(len, src1_ptr, src2_ptr);
                         self.registers[dest_reg] = sum.to_bits();
@@ -902,7 +1128,9 @@ impl ScriptVm {
     #[inline(never)]
     fn run_slow(&mut self, code: &[Instruction]) -> Result<VmResult, VmError> {
         // self.pc is NOT reset to 0 to support Yield
-        self.sp = 0;
+        if self.pc == 0 {
+            self.sp = 0;
+        }
         let mut steps = 0;
         while likely(self.pc < code.len()) {
             if let Some(abort) = self.abort_flag
@@ -1071,7 +1299,7 @@ impl ScriptVm {
                     }
                 }
                 26 => {
-                    if self.sp < 64 {
+                    if self.sp < covopt_param!("M_1302_33", 64) {
                         self.call_stack[self.sp] = self.pc;
                         self.sp += 1;
                         self.pc = crate::inst_imm16!(inst) as usize;
@@ -1093,23 +1321,43 @@ impl ScriptVm {
                     }
                 }
                 29 => {
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    let dest_idx = a % covopt_param!("M_1327_39", 256);
+                    let init_val = self.registers[dest_idx];
+
+                    if self.host_context.is_some() {
+                        let mut context = self.host_context.take().unwrap();
+                        context.dispatch_syscall(self, a, b, c);
+                        self.host_context = Some(context);
+                    }
+                    if self.registers[dest_idx] == init_val {
+                        for handler in self.syscall_handlers.clone() {
+                            handler(self, a, b, c);
+                            if self.registers[dest_idx] != init_val {
+                                break;
+                            }
+                        }
+                    }
                     if let Some(handler) = self.syscall_handler {
                         handler(
-                            self.registers[crate::inst_a!(inst)],
-                            self.registers[crate::inst_b!(inst)],
-                            self.registers[crate::inst_c!(inst)],
+                            self.registers[a],
+                            self.registers[b],
+                            self.registers[c],
                         );
                     }
+                    reg_change = Some((a as u8, self.registers[a]));
                 }
                 30 => {
                     let addr = self.registers[crate::inst_b!(inst)]
                         .wrapping_add(self.registers[crate::inst_c!(inst)])
                         as usize;
-                    let ptr = self.get_ptr(addr, 4)?;
+                    let ptr = self.get_ptr(addr, covopt_param!("M_1356_49", 4))?;
                     let mut val = 0u32;
                     unsafe {
-                        for i in 0..4 {
-                            val |= (*ptr.add(i) as u32) << (i * 8);
+                        for i in 0..covopt_param!("M_1359_36", 4) {
+                            val |= (*ptr.add(i) as u32) << (i * covopt_param!("M_1360_64", 8));
                         }
                     }
                     self.registers[crate::inst_a!(inst)] = val;
@@ -1119,11 +1367,11 @@ impl ScriptVm {
                     let addr = self.registers[crate::inst_b!(inst)]
                         .wrapping_add(self.registers[crate::inst_c!(inst)])
                         as usize;
-                    let ptr = self.get_mut_ptr(addr, 4)?;
+                    let ptr = self.get_mut_ptr(addr, covopt_param!("M_1370_53", 4))?;
                     let val = self.registers[crate::inst_a!(inst)];
                     unsafe {
-                        for i in 0..4 {
-                            *ptr.add(i) = ((val >> (i * 8)) & 0xFF) as u8;
+                        for i in 0..covopt_param!("M_1373_36", 4) {
+                            *ptr.add(i) = ((val >> (i * covopt_param!("M_1374_56", 8))) & covopt_param!("M_1374_62", 255)) as u8;
                         }
                     }
                     mem_change = Some((addr as u16, val));
@@ -1148,9 +1396,9 @@ impl ScriptVm {
                     }
                 }
                 34 => {
-                    let val = (self.registers[crate::inst_b!(inst)] & 0xFF) as i8;
+                    let val = (self.registers[crate::inst_b!(inst)] & covopt_param!("M_1399_70", 255)) as i8;
                     if let Some(res) = no_std_tool::math::silu_approx_i8(val) {
-                        let val_u32 = (res as u32) & 0xFF;
+                        let val_u32 = (res as u32) & covopt_param!("M_1401_53", 255);
                         self.registers[crate::inst_a!(inst)] = val_u32;
                         reg_change = Some((crate::inst_a!(inst) as u8, val_u32));
                     } else {
@@ -1169,25 +1417,42 @@ impl ScriptVm {
                     }
                 }
                 35 => {
-                    let handler = self.hardware_handler;
-                    if let Some(h) = handler {
-                        h(
-                            self,
-                            crate::inst_a!(inst),
-                            crate::inst_b!(inst),
-                            crate::inst_c!(inst),
-                        );
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    let dest_idx = a % covopt_param!("M_1423_39", 256);
+                    let init_val = self.registers[dest_idx];
+                    if self.host_context.is_some() {
+                        let mut context = self.host_context.take().unwrap();
+                        context.dispatch_hardware_call(self, a, b, c);
+                        self.host_context = Some(context);
                     }
+                    if self.registers[dest_idx] == init_val {
+                        for handler in self.hardware_handlers.clone() {
+                            handler(self, a, b, c);
+                            if self.registers[dest_idx] != init_val {
+                                break;
+                            }
+                        }
+                        if self.registers[dest_idx] == init_val
+                            && let Some(handler) = self.hardware_handler
+                        {
+                            handler(self, a, b, c);
+                        }
+                    }
+                    reg_change = Some((a as u8, self.registers[a]));
                 }
                 36 => {
-                    let cmd = crate::inst_b!(inst);
-                    if crate::inst_a!(inst) == 0 || !(1..=4).contains(&cmd) {
-                    } else if let Some(handler) = self.ui_handler {
-                        handler(
-                            crate::inst_a!(inst),
-                            crate::inst_b!(inst),
-                            crate::inst_c!(inst),
-                        );
+                    let a = crate::inst_a!(inst);
+                    let b = crate::inst_b!(inst);
+                    let c = crate::inst_c!(inst);
+                    if self.ui_dispatcher.is_some() {
+                        let mut dispatcher = self.ui_dispatcher.take().unwrap();
+                        let _ = dispatcher.dispatch(self, a, b, c);
+                        self.ui_dispatcher = Some(dispatcher);
+                    }
+                    if let Some(handler) = self.ui_handler {
+                        handler(a, b, c);
                     }
                 }
                 38 => {
@@ -1199,9 +1464,10 @@ impl ScriptVm {
                     let dest = self.registers[crate::inst_a!(inst)] as usize;
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let dest_ptr = self.get_mut_ptr(dest, len * 4)?;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_1467_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: dest })?;
+                    let dest_ptr = self.get_mut_ptr(dest, byte_len)?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         crate::sgl::simd_ops::simd_vec_add(len, src1_ptr, src2_ptr, dest_ptr);
                     }
@@ -1212,9 +1478,10 @@ impl ScriptVm {
                     let dest = self.registers[crate::inst_a!(inst)] as usize;
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let dest_ptr = self.get_mut_ptr(dest, len * 4)?;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_1481_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: dest })?;
+                    let dest_ptr = self.get_mut_ptr(dest, byte_len)?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         crate::sgl::simd_ops::simd_vec_mul(len, src1_ptr, src2_ptr, dest_ptr);
                     }
@@ -1225,13 +1492,14 @@ impl ScriptVm {
                     let dest_reg = crate::inst_a!(inst);
                     let src1 = self.registers[crate::inst_b!(inst)] as usize;
                     let src2 = self.registers[crate::inst_c!(inst)] as usize;
-                    let src1_ptr = self.get_ptr(src1, len * 4)?;
-                    let src2_ptr = self.get_ptr(src2, len * 4)?;
+                    let byte_len = len.checked_mul(covopt_param!("M_1495_51", 4)).ok_or(VmError::MemoryAccessOutOfBounds { pc: self.pc.wrapping_sub(1), addr: src1 })?;
+                    let src1_ptr = self.get_ptr(src1, byte_len)?;
+                    let src2_ptr = self.get_ptr(src2, byte_len)?;
                     unsafe {
                         let mut sum = 0.0f32;
                         for i in 0..len {
-                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * 4) as *const [u8; 4]));
-                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * 4) as *const [u8; 4]));
+                            let val1 = f32::from_le_bytes(core::ptr::read_unaligned(src1_ptr.add(i * covopt_param!("M_1501_101", 4)) as *const [u8; 4]));
+                            let val2 = f32::from_le_bytes(core::ptr::read_unaligned(src2_ptr.add(i * covopt_param!("M_1502_101", 4)) as *const [u8; 4]));
                             sum += val1 * val2;
                         }
                         self.registers[dest_reg] = sum.to_bits();
@@ -1290,9 +1558,9 @@ mod tests {
     fn test_div_by_zero() {
         let mut vm = ScriptVm::new();
         let code = [
-            Instruction::new(OpCode::LoadImm as u8, 1, 10, 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1561_55", 10), 0),
             Instruction::new(OpCode::LoadImm as u8, 2, 0, 0),
-            Instruction::new(OpCode::Div as u8, 3, 1, 2),
+            Instruction::new(OpCode::Div as u8, covopt_param!("M_1563_48", 3), 1, 2),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let result = vm.run(&code);
@@ -1315,7 +1583,7 @@ mod tests {
     #[test]
     fn test_invalid_opcode() {
         let mut vm = ScriptVm::new();
-        let code = [Instruction::new(0x99, 0, 0, 0)];
+        let code = [Instruction::new(covopt_param!("M_1586_37", 153), 0, 0, 0)];
         let result = vm.run(&code);
         assert_eq!(
             result,
@@ -1332,15 +1600,15 @@ mod tests {
             .parse::<usize>()
             .unwrap();
         let mut vm = ScriptVm::new();
-        let val1 = 3.5f32.to_bits();
-        let val2 = 1.5f32.to_bits();
+        let val1 = (covopt_param!("M_1603_19", 3.5) as f32).to_bits();
+        let val2 = (covopt_param!("M_1604_19", 1.5) as f32).to_bits();
         vm.registers[1] = val1;
         vm.registers[2] = val2;
         let code = [
-            Instruction::new(OpCode::FAdd as u8, 3, 1, 2),
-            Instruction::new(OpCode::FSub as u8, 4, 1, 2),
-            Instruction::new(OpCode::FMul as u8, 5, 1, 2),
-            Instruction::new(OpCode::FDiv as u8, 6, 1, 2),
+            Instruction::new(OpCode::FAdd as u8, covopt_param!("M_1608_49", 3), 1, 2),
+            Instruction::new(OpCode::FSub as u8, covopt_param!("M_1609_49", 4), 1, 2),
+            Instruction::new(OpCode::FMul as u8, covopt_param!("M_1610_49", 5), 1, 2),
+            Instruction::new(OpCode::FDiv as u8, covopt_param!("M_1611_49", 6), 1, 2),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         for _ in 0..n {
@@ -1354,12 +1622,12 @@ mod tests {
     #[test]
     fn test_memory_load_store() {
         let mut vm = ScriptVm::new();
-        vm.registers[1] = 42;
-        vm.registers[2] = 10;
-        vm.registers[3] = 4;
+        vm.registers[1] = covopt_param!("M_1625_26", 42);
+        vm.registers[2] = covopt_param!("M_1626_26", 10);
+        vm.registers[covopt_param!("M_1627_21", 3)] = covopt_param!("M_1627_26", 4);
         let code = [
-            Instruction::new(OpCode::Store as u8, 1, 2, 3),
-            Instruction::new(OpCode::Load as u8, 4, 2, 3),
+            Instruction::new(OpCode::Store as u8, 1, 2, covopt_param!("M_1629_56", 3)),
+            Instruction::new(OpCode::Load as u8, covopt_param!("M_1630_49", 4), 2, covopt_param!("M_1630_55", 3)),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         vm.run(&code).unwrap();
@@ -1373,12 +1641,12 @@ mod tests {
     fn test_math_approximations() {
         let mut vm = ScriptVm::new();
         vm.registers[1] = 0;
-        vm.registers[2] = 4;
-        vm.registers[3] = 2;
+        vm.registers[2] = covopt_param!("M_1644_26", 4);
+        vm.registers[covopt_param!("M_1645_21", 3)] = 2;
         let code = [
-            Instruction::new(OpCode::Exp as u8, 4, 1, 0),
-            Instruction::new(OpCode::Rsqrt as u8, 5, 2, 0),
-            Instruction::new(OpCode::Silu as u8, 6, 3, 0),
+            Instruction::new(OpCode::Exp as u8, covopt_param!("M_1647_48", 4), 1, 0),
+            Instruction::new(OpCode::Rsqrt as u8, covopt_param!("M_1648_50", 5), 2, 0),
+            Instruction::new(OpCode::Silu as u8, covopt_param!("M_1649_49", 6), covopt_param!("M_1649_52", 3), 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         vm.run(&code).unwrap();
@@ -1402,7 +1670,7 @@ mod tests {
     #[test]
     fn test_out_of_fuel() {
         let mut vm = ScriptVm::new();
-        vm.max_steps = Some(50);
+        vm.max_steps = Some(covopt_param!("M_1673_28", 50));
         let code = [Instruction::new(OpCode::Jmp as u8, 0, 0, 0)];
         let result = vm.run(&code);
         assert_eq!(result, Err(VmError::OutOfFuel { pc: 0 }));
@@ -1412,7 +1680,7 @@ mod tests {
         let mut vm = ScriptVm::new();
         vm.tracing_enabled = true;
         let code = [
-            Instruction::new(OpCode::LoadImm as u8, 1, 42, 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1683_55", 42), 0),
             Instruction::new(OpCode::Store as u8, 1, 0, 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
@@ -1440,13 +1708,39 @@ mod tests {
             }
         });
         let code = [
-            Instruction::new(OpCode::LoadImm as u8, 1, 10, 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1711_55", 10), 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         vm.run(&code).unwrap();
         assert_eq!(EXEC_COUNT.load(Ordering::Relaxed), 2);
     }
-    #[cfg(feature = "std")]
+    #[test]
+    fn test_run_slow_syscall_and_hardware_handlers() {
+        let mut vm = ScriptVm::new();
+        vm.tracing_enabled = true; // Forces run_slow execution path
+
+        fn mock_syscall(vm: &mut ScriptVm, a: usize, _b: usize, _c: usize) {
+            vm.registers[a] = covopt_param!("M_1723_30", 100);
+        }
+
+        fn mock_hardware(vm: &mut ScriptVm, a: usize, _b: usize, _c: usize) {
+            vm.registers[a] = covopt_param!("M_1727_30", 200);
+        }
+
+        vm.register_syscall_handler_ext(mock_syscall);
+        vm.register_hardware_handler(mock_hardware);
+
+        // Syscall: OpCode 29, R[1], R[0], R[0]
+        let syscall_inst = Instruction::new(OpCode::SysCall as u8, 1, 0, 0);
+        // HardwareCall: OpCode 35, R[2], R[0], R[0]
+        let hardware_inst = Instruction::new(OpCode::HardwareCall as u8, 2, 0, 0);
+        let code = [syscall_inst, hardware_inst, Instruction::new(OpCode::Halt as u8, 0, 0, 0)];
+
+        let res = vm.run(&code);
+        assert!(res.is_ok());
+        assert_eq!(vm.registers[1], 100);
+        assert_eq!(vm.registers[2], 200);
+    }
     #[test]
     fn test_panic_recovery() {
         let mut vm = ScriptVm::new();
@@ -1463,12 +1757,12 @@ mod tests {
     #[test]
     fn test_hot_reload_state_preservation() {
         let mut vm = ScriptVm::new();
-        vm.pc = 42;
-        vm.sp = 5;
-        vm.call_stack[0] = 99;
-        vm.registers[3] = 77;
-        vm.registers[20] = 88;
-        vm.memory[10] = 55;
+        vm.pc = covopt_param!("M_1760_16", 42);
+        vm.sp = covopt_param!("M_1761_16", 5);
+        vm.call_stack[0] = covopt_param!("M_1762_27", 99);
+        vm.registers[covopt_param!("M_1763_21", 3)] = covopt_param!("M_1763_26", 77);
+        vm.registers[covopt_param!("M_1764_21", 20)] = covopt_param!("M_1764_27", 88);
+        vm.memory[covopt_param!("M_1765_18", 10)] = covopt_param!("M_1765_24", 55);
         vm.hot_reload();
         assert_eq!(vm.pc, 0);
         assert_eq!(vm.sp, 0);
@@ -1485,7 +1779,7 @@ mod tests {
             .unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let mut handles = std::vec::Vec::new();
-        for _ in 0..4 {
+        for _ in 0..covopt_param!("M_1782_20", 4) {
             let tx_clone = tx.clone();
             let handle = std::thread::spawn(move || {
                 let n = n;
@@ -1498,46 +1792,46 @@ mod tests {
                     Instruction::new(OpCode::LoadImm as u8, 2, 1, 0),
                     Instruction::new(OpCode::LoadImm as u8, 0, 0, 0),
                     Instruction::new(OpCode::JmpIfZero as u8, 1, 0, 0),
-                    Instruction::new(OpCode::JmpIfZero as u8, 0, 6, 0),
+                    Instruction::new(OpCode::JmpIfZero as u8, 0, covopt_param!("M_1795_65", 6), 0),
                     Instruction::new(OpCode::Halt as u8, 0, 0, 0),
                     Instruction::new(OpCode::JmpIfEq as u8, 1, 2, 0),
-                    Instruction::new(OpCode::JmpIfEq as u8, 1, 1, 9),
+                    Instruction::new(OpCode::JmpIfEq as u8, 1, 1, covopt_param!("M_1798_66", 9)),
                     Instruction::new(OpCode::Halt as u8, 0, 0, 0),
                     Instruction::new(OpCode::JmpIfLt as u8, 1, 2, 0),
-                    Instruction::new(OpCode::JmpIfLt as u8, 2, 1, 12),
+                    Instruction::new(OpCode::JmpIfLt as u8, 2, 1, covopt_param!("M_1801_66", 12)),
                     Instruction::new(OpCode::Halt as u8, 0, 0, 0),
                     Instruction::new(OpCode::JmpIfGt as u8, 2, 1, 0),
-                    Instruction::new(OpCode::JmpIfGt as u8, 1, 2, 15),
+                    Instruction::new(OpCode::JmpIfGt as u8, 1, 2, covopt_param!("M_1804_66", 15)),
                     Instruction::new(OpCode::Halt as u8, 0, 0, 0),
                     Instruction::new(OpCode::JmpIfFLt as u8, 1, 2, 0),
-                    Instruction::new(OpCode::JmpIfFLt as u8, 2, 1, 18),
+                    Instruction::new(OpCode::JmpIfFLt as u8, 2, 1, covopt_param!("M_1807_67", 18)),
                     Instruction::new(OpCode::Halt as u8, 0, 0, 0),
                     Instruction::new(OpCode::JmpIfFGt as u8, 2, 1, 0),
-                    Instruction::new(OpCode::JmpIfFGt as u8, 1, 2, 21),
+                    Instruction::new(OpCode::JmpIfFGt as u8, 1, 2, covopt_param!("M_1810_67", 21)),
                     Instruction::new(OpCode::Halt as u8, 0, 0, 0),
-                    Instruction::new(OpCode::LoadImm16 as u8, 4, 0, 5),
-                    Instruction::new(OpCode::Add as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Sub as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Mul as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Div as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Mod as u8, 5, 1, 2),
-                    Instruction::new(OpCode::And as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Or as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Xor as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Shl as u8, 5, 1, 2),
-                    Instruction::new(OpCode::Shr as u8, 5, 1, 2),
-                    Instruction::new(OpCode::CmpEq as u8, 5, 1, 2),
-                    Instruction::new(OpCode::CmpLt as u8, 5, 1, 2),
-                    Instruction::new(OpCode::FAdd as u8, 5, 1, 2),
-                    Instruction::new(OpCode::FSub as u8, 5, 1, 2),
-                    Instruction::new(OpCode::FMul as u8, 5, 1, 2),
-                    Instruction::new(OpCode::FDiv as u8, 5, 1, 2),
+                    Instruction::new(OpCode::LoadImm16 as u8, covopt_param!("M_1812_62", 4), 0, covopt_param!("M_1812_68", 5)),
+                    Instruction::new(OpCode::Add as u8, covopt_param!("M_1813_56", 5), 1, 2),
+                    Instruction::new(OpCode::Sub as u8, covopt_param!("M_1814_56", 5), 1, 2),
+                    Instruction::new(OpCode::Mul as u8, covopt_param!("M_1815_56", 5), 1, 2),
+                    Instruction::new(OpCode::Div as u8, covopt_param!("M_1816_56", 5), 1, 2),
+                    Instruction::new(OpCode::Mod as u8, covopt_param!("M_1817_56", 5), 1, 2),
+                    Instruction::new(OpCode::And as u8, covopt_param!("M_1818_56", 5), 1, 2),
+                    Instruction::new(OpCode::Or as u8, covopt_param!("M_1819_55", 5), 1, 2),
+                    Instruction::new(OpCode::Xor as u8, covopt_param!("M_1820_56", 5), 1, 2),
+                    Instruction::new(OpCode::Shl as u8, covopt_param!("M_1821_56", 5), 1, 2),
+                    Instruction::new(OpCode::Shr as u8, covopt_param!("M_1822_56", 5), 1, 2),
+                    Instruction::new(OpCode::CmpEq as u8, covopt_param!("M_1823_58", 5), 1, 2),
+                    Instruction::new(OpCode::CmpLt as u8, covopt_param!("M_1824_58", 5), 1, 2),
+                    Instruction::new(OpCode::FAdd as u8, covopt_param!("M_1825_57", 5), 1, 2),
+                    Instruction::new(OpCode::FSub as u8, covopt_param!("M_1826_57", 5), 1, 2),
+                    Instruction::new(OpCode::FMul as u8, covopt_param!("M_1827_57", 5), 1, 2),
+                    Instruction::new(OpCode::FDiv as u8, covopt_param!("M_1828_57", 5), 1, 2),
                     Instruction::new(OpCode::Store as u8, 1, 0, 2),
-                    Instruction::new(OpCode::Load as u8, 5, 0, 2),
-                    Instruction::new(OpCode::PrintReg as u8, 5, 0, 0),
-                    Instruction::new(OpCode::SysCall as u8, 5, 0, 0),
-                    Instruction::new(OpCode::Call as u8, 0, 44, 0),
-                    Instruction::new(OpCode::Jmp as u8, 0, 45, 0),
+                    Instruction::new(OpCode::Load as u8, covopt_param!("M_1830_57", 5), 0, 2),
+                    Instruction::new(OpCode::PrintReg as u8, covopt_param!("M_1831_61", 5), 0, 0),
+                    Instruction::new(OpCode::SysCall as u8, covopt_param!("M_1832_60", 5), 0, 0),
+                    Instruction::new(OpCode::Call as u8, 0, covopt_param!("M_1833_60", 44), 0),
+                    Instruction::new(OpCode::Jmp as u8, 0, covopt_param!("M_1834_59", 45), 0),
                     Instruction::new(OpCode::Ret as u8, 0, 0, 0),
                     Instruction::new(OpCode::Halt as u8, 0, 0, 0),
                 ];
@@ -1548,8 +1842,8 @@ mod tests {
             });
             handles.push(handle);
         }
-        for _ in 0..4 {
-            rx.recv_timeout(std::time::Duration::from_secs(5))
+        for _ in 0..covopt_param!("M_1845_20", 4) {
+            rx.recv_timeout(std::time::Duration::from_secs(covopt_param!("M_1846_59", 5)))
                 .expect("Watchdog timeout");
         }
         for handle in handles {
@@ -1557,16 +1851,16 @@ mod tests {
         }
         let mut vm_err = ScriptVm::new();
         let code_div0 = [
-            Instruction::new(OpCode::LoadImm as u8, 1, 10, 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1854_55", 10), 0),
             Instruction::new(OpCode::LoadImm as u8, 2, 0, 0),
-            Instruction::new(OpCode::Div as u8, 3, 1, 2),
+            Instruction::new(OpCode::Div as u8, covopt_param!("M_1856_48", 3), 1, 2),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let _ = vm_err.run_fast(&code_div0);
         let code_fdiv0 = [
-            Instruction::new(OpCode::LoadImm as u8, 1, 10, 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1861_55", 10), 0),
             Instruction::new(OpCode::LoadImm as u8, 2, 0, 0),
-            Instruction::new(OpCode::FDiv as u8, 3, 1, 2),
+            Instruction::new(OpCode::FDiv as u8, covopt_param!("M_1863_49", 3), 1, 2),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let _ = vm_err.run_fast(&code_fdiv0);
@@ -1574,8 +1868,8 @@ mod tests {
             Instruction::new(
                 OpCode::LoadImm16 as u8,
                 1,
-                (10000 & 0xFF) as u8,
-                (10000 >> 8) as u8,
+                (covopt_param!("M_1871_17", 10000) & covopt_param!("M_1871_25", 255)) as u8,
+                (covopt_param!("M_1872_17", 10000) >> covopt_param!("M_1872_26", 8)) as u8,
             ),
             Instruction::new(OpCode::Load as u8, 2, 1, 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
@@ -1590,7 +1884,7 @@ mod tests {
         ];
         let _ = vm_err.run_fast(&code_su);
         let code_inv = [
-            Instruction::new(255, 0, 0, 0),
+            Instruction::new(covopt_param!("M_1887_29", 255), 0, 0, 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let _ = vm_err.run_fast(&code_inv);
@@ -1605,7 +1899,7 @@ mod tests {
             Instruction::new(OpCode::SysCall as u8, 0, 0, 0),
             Instruction::new(OpCode::HardwareCall as u8, 0, 0, 0),
             Instruction::new(OpCode::UiCall as u8, 1, 1, 0),
-            Instruction::new(OpCode::UiCall as u8, 0, 5, 0),
+            Instruction::new(OpCode::UiCall as u8, 0, covopt_param!("M_1902_54", 5), 0),
             Instruction::new(OpCode::NeuralCall as u8, 0, 0, 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
@@ -1616,16 +1910,16 @@ mod tests {
         let code_jumps = [
             Instruction::new(OpCode::JmpIfZero as u8, 1, 1, 0),
             Instruction::new(OpCode::JmpIfZero as u8, 2, 2, 0),
-            Instruction::new(OpCode::JmpIfEq as u8, 1, 1, 3),
-            Instruction::new(OpCode::JmpIfEq as u8, 1, 2, 3),
-            Instruction::new(OpCode::JmpIfLt as u8, 1, 2, 5),
-            Instruction::new(OpCode::JmpIfLt as u8, 2, 1, 5),
-            Instruction::new(OpCode::JmpIfGt as u8, 2, 1, 7),
-            Instruction::new(OpCode::JmpIfGt as u8, 1, 2, 7),
-            Instruction::new(OpCode::JmpIfFLt as u8, 1, 2, 9),
-            Instruction::new(OpCode::JmpIfFLt as u8, 2, 1, 9),
-            Instruction::new(OpCode::JmpIfFGt as u8, 2, 1, 11),
-            Instruction::new(OpCode::JmpIfFGt as u8, 1, 2, 11),
+            Instruction::new(OpCode::JmpIfEq as u8, 1, 1, covopt_param!("M_1913_58", 3)),
+            Instruction::new(OpCode::JmpIfEq as u8, 1, 2, covopt_param!("M_1914_58", 3)),
+            Instruction::new(OpCode::JmpIfLt as u8, 1, 2, covopt_param!("M_1915_58", 5)),
+            Instruction::new(OpCode::JmpIfLt as u8, 2, 1, covopt_param!("M_1916_58", 5)),
+            Instruction::new(OpCode::JmpIfGt as u8, 2, 1, covopt_param!("M_1917_58", 7)),
+            Instruction::new(OpCode::JmpIfGt as u8, 1, 2, covopt_param!("M_1918_58", 7)),
+            Instruction::new(OpCode::JmpIfFLt as u8, 1, 2, covopt_param!("M_1919_59", 9)),
+            Instruction::new(OpCode::JmpIfFLt as u8, 2, 1, covopt_param!("M_1920_59", 9)),
+            Instruction::new(OpCode::JmpIfFGt as u8, 2, 1, covopt_param!("M_1921_59", 11)),
+            Instruction::new(OpCode::JmpIfFGt as u8, 1, 2, covopt_param!("M_1922_59", 11)),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let _ = vm_jumps.run_fast(&code_jumps);
@@ -1633,18 +1927,18 @@ mod tests {
             Instruction::new(
                 OpCode::LoadImm16 as u8,
                 1,
-                (10000 & 0xFF) as u8,
-                (10000 >> 8) as u8,
+                (covopt_param!("M_1930_17", 10000) & covopt_param!("M_1930_25", 255)) as u8,
+                (covopt_param!("M_1931_17", 10000) >> covopt_param!("M_1931_26", 8)) as u8,
             ),
             Instruction::new(OpCode::Store as u8, 2, 1, 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let _ = vm_err.run_fast(&code_store);
         let code_math_exp = [
-            Instruction::new(OpCode::LoadImm as u8, 1, 11, 0),
-            Instruction::new(OpCode::LoadImm as u8, 2, 16, 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1938_55", 11), 0),
+            Instruction::new(OpCode::LoadImm as u8, 2, covopt_param!("M_1939_55", 16), 0),
             Instruction::new(OpCode::Shl as u8, 1, 1, 2),
-            Instruction::new(OpCode::Exp as u8, 3, 1, 0),
+            Instruction::new(OpCode::Exp as u8, covopt_param!("M_1941_48", 3), 1, 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let _ = vm_err.run_fast(&code_math_exp);
@@ -1655,10 +1949,38 @@ mod tests {
         ];
         let _ = vm_err.run_fast(&code_math_rsqrt);
         let code_math_silu = [
-            Instruction::new(OpCode::LoadImm as u8, 1, 128, 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1952_55", 128), 0),
             Instruction::new(OpCode::Silu as u8, 2, 1, 0),
             Instruction::new(OpCode::Halt as u8, 0, 0, 0),
         ];
         let _ = vm_err.run_fast(&code_math_silu);
+    }
+
+    #[test]
+    fn test_yield_inside_subroutine() {
+        let mut vm = ScriptVm::new();
+        // Program structure:
+        // PC 0: CALL subroutine at PC 3 (imm16 = 3)
+        // PC 1: LOADIMM R1 = 99
+        // PC 2: HALT
+        // PC 3 (subroutine start): YIELD
+        // PC 4: RET
+        let code = [
+            Instruction::new(OpCode::Call as u8, 0, covopt_param!("M_1969_52", 3), 0),
+            Instruction::new(OpCode::LoadImm as u8, 1, covopt_param!("M_1970_55", 99), 0),
+            Instruction::new(OpCode::Halt as u8, 0, 0, 0),
+            Instruction::new(OpCode::Yield as u8, 0, 0, 0),
+            Instruction::new(OpCode::Ret as u8, 0, 0, 0),
+        ];
+
+        let res1 = vm.run(&code);
+        assert_eq!(res1, Ok(VmResult::Yielded(2)));
+        assert_eq!(vm.pc, 4);
+        assert_eq!(vm.sp, 1);
+
+        let res2 = vm.run(&code);
+        assert!(matches!(res2, Ok(VmResult::Halted(_))));
+        assert_eq!(vm.registers[1], 99);
+        assert_eq!(vm.sp, 0);
     }
 }

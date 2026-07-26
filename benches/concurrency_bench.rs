@@ -1,3 +1,5 @@
+#[macro_use] extern crate covopt_macro;
+use covopt_macro::covopt_param;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use script_go::assembler::parse_asm;
 use script_go::instruction::{Instruction, OpCode};
@@ -18,7 +20,7 @@ struct Program {
 impl Program {
     fn from_vec(vec: Vec<Instruction>) -> Self {
         let mut code = [Instruction::new(OpCode::Halt as u8, 0, 0, 0); 64];
-        let len = vec.len().min(64);
+        let len = vec.len().min(covopt_param!("M_22_32", 64));
         code[..len].copy_from_slice(&vec[..len]);
         Self { code, len }
     }
@@ -55,7 +57,7 @@ impl Gateway {
 
 fn bench_hot_reload_contention(c: &mut Criterion) {
     let mut group = c.benchmark_group("hft_hot_reload");
-    group.sample_size(10);
+    group.sample_size(covopt_param!("M_59_22", 10));
     group.warm_up_time(std::time::Duration::from_secs(1));
     group.measurement_time(std::time::Duration::from_secs(1));
 
@@ -87,7 +89,7 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
                 };
                 gw_writer.hot_reload(script);
                 toggle = !toggle;
-                thread::sleep(std::time::Duration::from_micros(10));
+                thread::sleep(std::time::Duration::from_micros(covopt_param!("M_91_63", 10)));
             }
             no_std_tool::debug::track_thread_exit();
         })
@@ -104,7 +106,7 @@ fn bench_hot_reload_contention(c: &mut Criterion) {
                 no_std_tool::debug::track_thread_spawn();
                 while reader_running.load(Ordering::Relaxed) {
                     black_box(gw_reader.execute());
-                    thread::sleep(std::time::Duration::from_micros(10));
+                    thread::sleep(std::time::Duration::from_micros(covopt_param!("M_108_67", 10)));
                 }
                 no_std_tool::debug::track_thread_exit();
             })

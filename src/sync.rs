@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use core::cell::UnsafeCell;
 use core::hint::spin_loop;
 use core::sync::atomic::{fence, AtomicUsize, Ordering};

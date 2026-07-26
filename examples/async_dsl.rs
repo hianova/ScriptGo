@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use script_go::compiler::codegen::CodeGen;
 use script_go::compiler::lexer::Lexer;
 use script_go::compiler::parser::Parser;
@@ -14,7 +17,7 @@ fn main() {
     println!("Parsing SGL Script:\n{}", script);
 
     let mut lexer = Lexer::new(script);
-    let tokens = lexer.tokenize();
+    let tokens = lexer.tokenize().unwrap();
 
     let mut parser = Parser::new(tokens);
     let ast = match parser.parse() {

@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use script_go::sgl::assembler::ScriptAssembler;
 use script_go::sgl::vm::{ScriptVm, VmResult};
 use std::collections::{HashMap, VecDeque};
@@ -11,7 +14,7 @@ fn main() {
     // -- MAIN FUNCTION (PC = 0) --
     // Spawn a child task starting at label (PC = 100)
     // R[1] = task_id
-    asm.spawn(1, 100); 
+    asm.spawn(1, covopt_param!("M_18_17", 100)); 
 
     // Await the task_id in R[1], and put result in R[2]
     asm.await_op(2, 1);
@@ -21,8 +24,8 @@ fn main() {
     asm.halt();
 
     // Pad with NOPs until PC = 100
-    let current_len = 4;
-    for _ in 0..(100 - current_len) {
+    let current_len = covopt_param!("M_28_22", 4);
+    for _ in 0..(covopt_param!("M_29_17", 100) - current_len) {
         asm.emit(script_go::sgl::instruction::Instruction::new(0, 0, 0, 0));
     }
 
@@ -33,7 +36,7 @@ fn main() {
     asm.yield_op();
     
     // Set R[0] = 42 (return value)
-    asm.load_imm(0, 42);
+    asm.load_imm(0, covopt_param!("M_40_20", 42));
     asm.halt();
 
     let code = asm.build();

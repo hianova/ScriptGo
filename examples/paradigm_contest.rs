@@ -1,4 +1,7 @@
+#![allow(unused_imports)]
 #![allow(dead_code)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use std::time::Instant;
 use std::hint::black_box;
 use tokio::time::{sleep, Duration};
@@ -10,7 +13,7 @@ fn benchmark_python_replacer() {
     println!("--------------------------------------------------");
     println!("🐍 PART 1: PYTHON REPLACER (Tensor Broadcasting)");
     
-    let size = 10_000_000;
+    let size = covopt_macro::covopt_param!("M_16_15", 10000000);
     let mut a = vec![1.0_f32; size];
     let b = vec![2.0_f32; size];
     let mut c = vec![0.0_f32; size];
@@ -78,7 +81,7 @@ impl SglCoroutine {
                 self.state = CoroutineState::Paused(self.counter);
             }
             CoroutineState::Paused(val) => {
-                if val >= 5 {
+                if val >= covopt_macro::covopt_param!("M_84_26", 5) {
                     self.state = CoroutineState::Done;
                 } else {
                     self.counter += 1;
@@ -107,7 +110,7 @@ fn benchmark_lua_replacer() {
     // Instantiate 1,000,000 coroutines.
     // In Lua, spawning 1M coroutines would consume ~2GB of RAM (each has a C stack).
     // In ScriptGo, this state machine takes ~16 bytes per coroutine (total 16MB).
-    let num_coroutines = 1_000_000;
+    let num_coroutines = covopt_macro::covopt_param!("M_113_25", 1000000);
     let mut swarm = Vec::with_capacity(num_coroutines);
     for _ in 0..num_coroutines {
         swarm.push(SglCoroutine::new());
@@ -132,7 +135,7 @@ async fn benchmark_js_replacer() {
     println!("\n--------------------------------------------------");
     println!("💛 PART 3: JS REPLACER (Rust Native Event Loop)");
     
-    let num_tasks = 100_000;
+    let num_tasks = covopt_macro::covopt_param!("M_138_20", 100000);
     println!("Spawning {} asynchronous lightweight tasks...", num_tasks);
     
     let start = Instant::now();
@@ -145,7 +148,7 @@ async fn benchmark_js_replacer() {
             // A non-blocking async delay (simulating network or disk I/O)
             if i == 0 {
                 // Just delay task 0 to prove non-blocking concurrency
-                sleep(Duration::from_millis(50)).await;
+                sleep(Duration::from_millis(covopt_macro::covopt_param!("M_151_44", 50))).await;
             }
             i * 2
         }));

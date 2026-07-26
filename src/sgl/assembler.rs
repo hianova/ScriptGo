@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use crate::sgl::instruction::{Instruction, OpCode};
 use alloc::vec::Vec;
 #[derive(Default)]
@@ -36,8 +39,8 @@ impl ScriptAssembler {
     }
     #[doc = " R[A] = imm16(B, C)"]
     pub fn load_imm16(&mut self, a: u8, val: u16) -> &mut Self {
-        let b = (val & 0xFF) as u8;
-        let c = ((val >> 8) & 0xFF) as u8;
+        let b = (val & covopt_param!("M_42_23", 255)) as u8;
+        let c = ((val >> covopt_param!("M_43_25", 8)) & covopt_param!("M_43_30", 255)) as u8;
         self.emit(Instruction::new(OpCode::LoadImm16 as u8, a, b, c))
     }
     #[doc = " R[A] = R[B] + R[C]"]
@@ -74,14 +77,14 @@ impl ScriptAssembler {
     }
     #[doc = " PC = imm16"]
     pub fn jmp(&mut self, target: u16) -> &mut Self {
-        let b = (target & 0xFF) as u8;
-        let c = ((target >> 8) & 0xFF) as u8;
+        let b = (target & covopt_param!("M_80_26", 255)) as u8;
+        let c = ((target >> covopt_param!("M_81_28", 8)) & covopt_param!("M_81_33", 255)) as u8;
         self.emit(Instruction::new(OpCode::Jmp as u8, 0, b, c))
     }
     #[doc = " If R[A] == 0, PC = target"]
     pub fn jmp_if_zero(&mut self, a: u8, target: u16) -> &mut Self {
-        let b = (target & 0xFF) as u8;
-        let c = ((target >> 8) & 0xFF) as u8;
+        let b = (target & covopt_param!("M_86_26", 255)) as u8;
+        let c = ((target >> covopt_param!("M_87_28", 8)) & covopt_param!("M_87_33", 255)) as u8;
         self.emit(Instruction::new(OpCode::JmpIfZero as u8, a, b, c))
     }
     #[doc = " If R[A] > R[B] as f32, PC = target"]
@@ -121,8 +124,8 @@ impl ScriptAssembler {
         self.emit(Instruction::new(OpCode::VecDot as u8, dest_reg, src1, src2))
     }
     pub fn spawn(&mut self, dest: u8, target_pc: u16) -> &mut Self {
-        let b = (target_pc & 0xFF) as u8;
-        let c = ((target_pc >> 8) & 0xFF) as u8;
+        let b = (target_pc & covopt_param!("M_127_29", 255)) as u8;
+        let c = ((target_pc >> covopt_param!("M_128_31", 8)) & covopt_param!("M_128_36", 255)) as u8;
         self.emit(Instruction::new(OpCode::Spawn as u8, dest, b, c))
     }
     pub fn await_op(&mut self, dest: u8, resource_reg: u8) -> &mut Self {

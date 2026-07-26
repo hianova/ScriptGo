@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use arc_swap::ArcSwap;
 use script_go::assembler::parse_asm;
 use script_go::instruction::Instruction;

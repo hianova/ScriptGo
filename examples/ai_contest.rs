@@ -1,4 +1,7 @@
+#![allow(unused_imports)]
 #![allow(unused_assignments, clippy::assign_op_pattern)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use std::process::Command;
 use std::time::Instant;
 

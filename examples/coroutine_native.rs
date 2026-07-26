@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use script_go::sgl::assembler::ScriptAssembler;
 use script_go::sgl::vm::{ScriptVm, VmResult};
 use std::time::Instant;
@@ -7,12 +10,12 @@ fn main() {
 
     let mut asm = ScriptAssembler::new();
     asm.load_imm(0, 0); // i = 0
-    asm.load_imm(1, 5); // limit = 5
+    asm.load_imm(1, covopt_param!("M_15_20", 5)); // limit = 5
     asm.load_imm(2, 1); // inc = 1
 
     let loop_start = asm.current_address() as u16;
 
-    asm.jmp_if_eq(0, 1, 100); 
+    asm.jmp_if_eq(0, 1, covopt_param!("M_20_24", 100)); 
 
     asm.print_reg(0);
     asm.add(0, 0, 2);
@@ -23,7 +26,7 @@ fn main() {
     asm.halt();
 
     let mut code = asm.build();
-    code[3] = script_go::sgl::instruction::Instruction::new(
+    code[covopt_param!("M_31_9", 3)] = script_go::sgl::instruction::Instruction::new(
         script_go::sgl::instruction::OpCode::JmpIfEq as u8,
         0,
         1,

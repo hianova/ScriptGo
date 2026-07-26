@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -33,8 +36,13 @@ pub enum BinaryOperator {
     Div,
     Mod,
     Eq,
+    Ne,
     Lt,
     Gt,
+    Le,
+    Ge,
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone, PartialEq)]

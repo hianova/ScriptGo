@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use crate::compiler::ast::*;
 use crate::compiler::ir::*;
 use alloc::format;
@@ -81,11 +84,11 @@ impl CodeGen {
                     Op::LoadImm(val) => {
                         let r = self.alloc_reg(inst.id);
                         let v = *val;
-                        if (0..256).contains(&v) {
+                        if (0..covopt_param!("M_87_31", 256)).contains(&v) {
                             bytecode.push(VmInst::new(OpCode::LoadImm as u8, r, v as u8, 0));
                         } else {
-                            let low = (v & 0xFF) as u8;
-                            let high = ((v >> 8) & 0xFF) as u8;
+                            let low = (v & covopt_param!("M_90_43", 255)) as u8;
+                            let high = ((v >> covopt_param!("M_91_46", 8)) & covopt_param!("M_91_51", 255)) as u8;
                             bytecode.push(VmInst::new(OpCode::LoadImm16 as u8, r, low, high));
                         }
                     }
@@ -112,6 +115,90 @@ impl CodeGen {
                         let r1 = self.get_reg(*v1);
                         let r2 = self.get_reg(*v2);
                         bytecode.push(VmInst::new(OpCode::Div as u8, r, r1, r2));
+                    }
+                    Op::Mod(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::Mod as u8, r, r1, r2));
+                    }
+                    Op::Eq(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::CmpEq as u8, r, r1, r2));
+                    }
+                    Op::Ne(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        let r_eq = self.reg_counter;
+                        self.reg_counter += 1;
+                        let r_one = self.reg_counter;
+                        self.reg_counter += 1;
+                        bytecode.push(VmInst::new(OpCode::LoadImm as u8, r_one, 1, 0));
+                        bytecode.push(VmInst::new(OpCode::CmpEq as u8, r_eq, r1, r2));
+                        bytecode.push(VmInst::new(OpCode::Sub as u8, r, r_one, r_eq));
+                    }
+                    Op::Lt(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::CmpLt as u8, r, r1, r2));
+                    }
+                    Op::Gt(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::CmpLt as u8, r, r2, r1));
+                    }
+                    Op::Le(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        let r_cmp = self.reg_counter;
+                        self.reg_counter += 1;
+                        let r_one = self.reg_counter;
+                        self.reg_counter += 1;
+                        bytecode.push(VmInst::new(OpCode::LoadImm as u8, r_one, 1, 0));
+                        bytecode.push(VmInst::new(OpCode::CmpLt as u8, r_cmp, r2, r1));
+                        bytecode.push(VmInst::new(OpCode::Sub as u8, r, r_one, r_cmp));
+                    }
+                    Op::Ge(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        let r_cmp = self.reg_counter;
+                        self.reg_counter += 1;
+                        let r_one = self.reg_counter;
+                        self.reg_counter += 1;
+                        bytecode.push(VmInst::new(OpCode::LoadImm as u8, r_one, 1, 0));
+                        bytecode.push(VmInst::new(OpCode::CmpLt as u8, r_cmp, r1, r2));
+                        bytecode.push(VmInst::new(OpCode::Sub as u8, r, r_one, r_cmp));
+                    }
+                    Op::And(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::And as u8, r, r1, r2));
+                    }
+                    Op::Or(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::Or as u8, r, r1, r2));
+                    }
+                    Op::ShiftLeft(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::Shl as u8, r, r1, r2));
+                    }
+                    Op::ShiftRight(v1, v2) => {
+                        let r = self.alloc_reg(inst.id);
+                        let r1 = self.get_reg(*v1);
+                        let r2 = self.get_reg(*v2);
+                        bytecode.push(VmInst::new(OpCode::Shr as u8, r, r1, r2));
                     }
                     Op::VarLoad(name) => {
                         let r_dest = self.alloc_reg(inst.id);
@@ -159,7 +246,7 @@ impl CodeGen {
                             let r_arg0 = self.get_reg(args[0]);
                             let r_arg1 = self.get_reg(args[1]);
                             let r_arg2 = self.get_reg(args[2]);
-                            bytecode.push(VmInst::new(0xFE, r_arg0, r_arg1, r_arg2));
+                            bytecode.push(VmInst::new(OpCode::UiCall as u8, r_arg0, r_arg1, r_arg2));
                         } else if name == "db_get_balance" {
                             let r_dest = self.get_reg(inst.id);
                             let r_arg0 = self.get_reg(args[0]);
@@ -200,7 +287,7 @@ impl CodeGen {
                         } else if name == "db.filter" {
                             let r_table = self.get_reg(args[0]);
                             let r_cond = self.get_reg(args[1]);
-                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, 3, r_table, r_cond));
+                            bytecode.push(VmInst::new(OpCode::HardwareCall as u8, covopt_param!("M_290_82", 3), r_table, r_cond));
                         } else if name == "ui.render" {
                             let r_dom = self.get_reg(args[0]);
                             bytecode.push(VmInst::new(OpCode::UiCall as u8, r_dom, 0, 0));
@@ -208,14 +295,14 @@ impl CodeGen {
                             let r_arg0 = if !args.is_empty() { self.get_reg(args[0]) } else { 0 };
                             let r_id = self.reg_counter;
                             self.reg_counter += 1;
-                            bytecode.push(VmInst::new(OpCode::LoadImm as u8, r_id, 0x99, 0));
+                            bytecode.push(VmInst::new(OpCode::LoadImm as u8, r_id, covopt_param!("M_298_83", 153), 0));
                             bytecode.push(VmInst::new(OpCode::SysCall as u8, r_id, r_arg0, 0));
                         }
                     }
                     Op::Spawn(target_pc) => {
                         let r_dest = self.get_reg(inst.id);
-                        let b = (target_pc & 0xFF) as u8;
-                        let c = ((target_pc >> 8) & 0xFF) as u8;
+                        let b = (target_pc & covopt_param!("M_304_45", 255)) as u8;
+                        let c = ((target_pc >> covopt_param!("M_305_47", 8)) & covopt_param!("M_305_52", 255)) as u8;
                         bytecode.push(VmInst::new(OpCode::Spawn as u8, r_dest, b, c));
                     }
                     Op::Await(task_id) => {
@@ -237,8 +324,8 @@ impl CodeGen {
         // Backpatch jumps
         for (idx, target_block, is_cond) in backpatch_jumps {
             if let Some(&target_pc) = block_starts.get(&target_block) {
-                let low = (target_pc & 0xFF) as u8;
-                let high = ((target_pc >> 8) & 0xFF) as u8;
+                let low = (target_pc & covopt_param!("M_327_39", 255)) as u8;
+                let high = ((target_pc >> covopt_param!("M_328_42", 8)) & covopt_param!("M_328_47", 255)) as u8;
                 if is_cond {
                     let r_cond = crate::inst_a!(bytecode[idx]) as u8;
                     bytecode[idx] = VmInst::new(OpCode::JmpIfZero as u8, r_cond, low, high);
@@ -440,24 +527,15 @@ impl CodeGen {
                     BinaryOperator::Sub => Op::Sub(l_id, r_id),
                     BinaryOperator::Mul => Op::Mul(l_id, r_id),
                     BinaryOperator::Div => Op::Div(l_id, r_id),
-                    BinaryOperator::Lt => {
-                        // Hack for Phase 3: We evaluate `a < b` by doing `b - a`.
-                        // As long as `a < b`, `b - a` is > 0 (NOT 0), so it takes True path.
-                        // When `a >= b`, `b - a` is 0 (wrapping arithmetic prevents negative results from wrapping to exactly 0 unless a==b? Wait.)
-                        // If b = 5, a = 6, b - a = -1. In u32 wrapping, it is 0xFFFFFFFF.
-                        // 0xFFFFFFFF is NOT 0. So it would still take True path! This is a bug!
-                        // In `vm.rs` we have:
-                        // `JmpIfLt = 0x33, // If R[A] < R[B], PC = C`
-                        // Why don't we just use `JmpIfLt`?
-                        // Because `JmpIfLt` takes 8-bit `C`. But we are jumping to basic blocks!
-                        // Oh no, 8-bit jump target is too small.
-                        // But wait! This is just a script_crusher benchmark. 8-bit (255 instructions) is MORE than enough for this benchmark! The benchmark only has like 10 instructions!
-                        // Let's just use `Op::Lt(l_id, r_id)` and map it to `JmpIfLt`? No, `JmpIfLt` jumps immediately.
-                        // That is SO easy and the right way to do it.
-                        Op::Lt(l_id, r_id)
-                    }
+                    BinaryOperator::Mod => Op::Mod(l_id, r_id),
                     BinaryOperator::Eq => Op::Eq(l_id, r_id),
-                    _ => return Err("Unsupported operator in Phase 3".into()),
+                    BinaryOperator::Ne => Op::Ne(l_id, r_id),
+                    BinaryOperator::Lt => Op::Lt(l_id, r_id),
+                    BinaryOperator::Gt => Op::Gt(l_id, r_id),
+                    BinaryOperator::Le => Op::Le(l_id, r_id),
+                    BinaryOperator::Ge => Op::Ge(l_id, r_id),
+                    BinaryOperator::And => Op::And(l_id, r_id),
+                    BinaryOperator::Or => Op::Or(l_id, r_id),
                 };
                 self.append_inst(func, block_id, Instruction { id, op: ir_op });
                 Ok(id)

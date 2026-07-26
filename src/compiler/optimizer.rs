@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use crate::compiler::ir::*;
 use no_std_tool::collections::HashMap;
 
@@ -51,6 +54,34 @@ impl Optimizer {
                             block.insts[i].op = Op::LoadImm(val);
                         }
                     }
+                    Op::And(v1, v2)
+                        if constants.contains_key(&v1) && constants.contains_key(&v2) =>
+                    {
+                        let val = constants[&v1] & constants[&v2];
+                        constants.insert(block.insts[i].id, val);
+                        block.insts[i].op = Op::LoadImm(val);
+                    }
+                    Op::Or(v1, v2)
+                        if constants.contains_key(&v1) && constants.contains_key(&v2) =>
+                    {
+                        let val = constants[&v1] | constants[&v2];
+                        constants.insert(block.insts[i].id, val);
+                        block.insts[i].op = Op::LoadImm(val);
+                    }
+                    Op::ShiftLeft(v1, v2)
+                        if constants.contains_key(&v1) && constants.contains_key(&v2) =>
+                    {
+                        let val = constants[&v1].wrapping_shl(constants[&v2] as u32);
+                        constants.insert(block.insts[i].id, val);
+                        block.insts[i].op = Op::LoadImm(val);
+                    }
+                    Op::ShiftRight(v1, v2)
+                        if constants.contains_key(&v1) && constants.contains_key(&v2) =>
+                    {
+                        let val = constants[&v1].wrapping_shr(constants[&v2] as u32);
+                        constants.insert(block.insts[i].id, val);
+                        block.insts[i].op = Op::LoadImm(val);
+                    }
                     _ => {}
                 }
                 i += 1;
@@ -69,6 +100,17 @@ impl Optimizer {
                     | Op::Sub(v1, v2)
                     | Op::Mul(v1, v2)
                     | Op::Div(v1, v2)
+                    | Op::Mod(v1, v2)
+                    | Op::Eq(v1, v2)
+                    | Op::Ne(v1, v2)
+                    | Op::Lt(v1, v2)
+                    | Op::Gt(v1, v2)
+                    | Op::Le(v1, v2)
+                    | Op::Ge(v1, v2)
+                    | Op::And(v1, v2)
+                    | Op::Or(v1, v2)
+                    | Op::ShiftLeft(v1, v2)
+                    | Op::ShiftRight(v1, v2)
                     | Op::TensorMul(v1, v2) => {
                         *used.entry(*v1).or_insert(0) += 1;
                         *used.entry(*v2).or_insert(0) += 1;

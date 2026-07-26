@@ -1,16 +1,28 @@
+#![allow(unused_imports)]
 #![no_std]
+#[macro_use] extern crate covopt_macro;
+use covopt_macro::covopt_param;
+use std::io::Write;
 extern crate alloc;
+extern crate self as script_go;
 pub mod sgl;
 pub use sgl::assembler::ScriptAssembler;
+pub use sgl::host_handlers;
 pub use sgl::instruction;
+pub use sgl::ui_engine;
 pub use sgl::vm;
-pub use sgl_macros::sgl_compile;
+pub use sgl::io::{self, SglIoRegisterExt};
+pub use sgl::net::{self, SglNetRegisterExt};
+pub use sgl_macros::{
+    sgl_cmd, sgl_combine_handlers, sgl_compile, sgl_hardware_call, sgl_package, sgl_syscall,
+};
 pub mod assembler;
 pub mod binary;
 pub mod compiler;
 pub mod sync;
-#[cfg(test)]
+#[cfg(feature = "std")]
 extern crate std;
+
 #[cfg(test)]
 mod covopt_tests {
     use super::*;
@@ -29,7 +41,7 @@ mod covopt_tests {
                              // 2: Jmp 0 0 0        (Jump back to 0)
                              // 3: Halt 0 0 0
         let code = [
-            instruction::Instruction::new(instruction::OpCode::JmpIfZero as u8, 1, 3, 0),
+            instruction::Instruction::new(instruction::OpCode::JmpIfZero as u8, 1, covopt_param!("M_44_83", 3), 0),
             instruction::Instruction::new(instruction::OpCode::Sub as u8, 1, 1, 2),
             instruction::Instruction::new(instruction::OpCode::Jmp as u8, 0, 0, 0),
             instruction::Instruction::new(instruction::OpCode::Halt as u8, 0, 0, 0),
@@ -38,3 +50,4 @@ mod covopt_tests {
         std::hint::black_box(steps);
     }
 }
+pub mod cli;

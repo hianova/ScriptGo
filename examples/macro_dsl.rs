@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use script_go::sgl::vm::{ScriptVm, VmResult};
 use script_go::compiler::codegen::CodeGen;
 use script_go::compiler::lexer::Lexer;
@@ -20,7 +23,7 @@ fn main() {
     println!("Parsing SGL Script:\n{}", script);
 
     let mut lexer = Lexer::new(script);
-    let tokens = lexer.tokenize();
+    let tokens = lexer.tokenize().unwrap();
     println!("Tokens: {:?}", tokens);
 
     let mut parser = Parser::new(tokens);
@@ -58,7 +61,7 @@ fn main() {
     
     vm.hardware_handler = Some(|vm_ref, id, r1, r2| {
         println!("VM intercepted HardwareCall {} with arg1 {}, arg2 {}", id, vm_ref.registers[r1], vm_ref.registers[r2]);
-        if id == 3 {
+        if id == covopt_param!("M_66_17", 3) {
             println!("🚀 Host Action: Zero-Copy DB Filter on table {}, condition {}", vm_ref.registers[r1], vm_ref.registers[r2]);
         }
     });

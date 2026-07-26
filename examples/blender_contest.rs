@@ -1,4 +1,7 @@
+#![allow(unused_imports)]
 #![allow(unused_assignments, clippy::assign_op_pattern)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use std::process::Command;
 use std::time::Instant;
 
@@ -31,18 +34,18 @@ fn main() {
     // ==========================================
     println!("\nRunning ScriptGo (SGL AOT) Physics benchmark...");
     
-    let num_objects = 100000;
-    let steps = 600;
+    let num_objects = covopt_macro::covopt_param!("M_37_22", 100000);
+    let steps = covopt_macro::covopt_param!("M_38_16", 600);
     
     let mut positions_y = vec![0.0f64; num_objects];
     for (i, pos_y) in positions_y.iter_mut().enumerate().take(num_objects) {
-        *pos_y = (i % 100) as f64 + 10.0;
+        *pos_y = (i % covopt_macro::covopt_param!("M_42_22", 100)) as f64 + covopt_macro::covopt_param!("M_42_36", 10.0);
     }
     let mut velocities_y = vec![0.0f64; num_objects];
     
-    let dt = 1.0f64 / 60.0f64;
-    let gravity = 9.8f64;
-    let bounce = -0.8f64;
+    let dt = 1.0f64 / covopt_macro::covopt_param!("M_46_22", 60.0);
+    let gravity = covopt_macro::covopt_param!("M_47_18", 9.8);
+    let bounce = -covopt_macro::covopt_param!("M_48_18", 0.8);
 
     let start_sgl = Instant::now();
     

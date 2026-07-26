@@ -1,7 +1,10 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use rkyv::{Archive, Deserialize, Serialize};
 use rkyv::rancor::Error;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write, Read, BufWriter};
+use std::io::{BufRead, BufReader, Read, BufWriter};
 use std::time::Instant;
 use std::path::Path;
 
@@ -35,9 +38,9 @@ fn generate_huge_obj(path: &str, num_vertices: usize, num_faces: usize) {
     
     // Generate vertices
     for i in 0..num_vertices {
-        let x = (i as f32) * 0.1;
-        let y = (i as f32) * 0.2;
-        let z = (i as f32) * 0.3;
+        let x = (i as f32) * covopt_param!("M_42_29", 0.1);
+        let y = (i as f32) * covopt_param!("M_43_29", 0.2);
+        let z = (i as f32) * covopt_param!("M_44_29", 0.3);
         writeln!(writer, "v {} {} {}", x, y, z).unwrap();
     }
     
@@ -74,20 +77,20 @@ fn parse_obj_naive(path: &str) -> Model3D {
         let line = line.unwrap();
         if line.starts_with("v ") {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() == 4 {
+            if parts.len() == covopt_param!("M_81_30", 4) {
                 vertices.push(Vertex {
                     x: parts[1].parse().unwrap(),
                     y: parts[2].parse().unwrap(),
-                    z: parts[3].parse().unwrap(),
+                    z: parts[covopt_param!("M_85_29", 3)].parse().unwrap(),
                 });
             }
         } else if line.starts_with("f ") {
             let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() == 4 {
+            if parts.len() == covopt_param!("M_90_30", 4) {
                 faces.push(Face {
                     v1: parts[1].parse().unwrap(),
                     v2: parts[2].parse().unwrap(),
-                    v3: parts[3].parse().unwrap(),
+                    v3: parts[covopt_param!("M_94_30", 3)].parse().unwrap(),
                 });
             }
         }
@@ -114,7 +117,7 @@ fn parse_sgl3d_zerocopy(path: &str) {
     // or just iterate and apply it to a hardware display buffer.
     // For this benchmark, we just read them.
     let mut checksum = 0.0;
-    for i in 0..1000.min(v_count) {
+    for i in 0..covopt_param!("M_121_16", 1000).min(v_count) {
         checksum += archived.vertices[i].x.to_native();
     }
     
@@ -129,8 +132,8 @@ fn main() {
     let obj_path = "/tmp/huge_model.obj";
     let sgl3d_path = "/tmp/huge_model.sgl3d";
     
-    let v_count = 1_000_000;
-    let f_count = 2_000_000;
+    let v_count = covopt_param!("M_136_18", 1000000);
+    let f_count = covopt_param!("M_137_18", 2000000);
     
     generate_huge_obj(obj_path, v_count, f_count);
     generate_sgl3d_from_obj(obj_path, sgl3d_path);

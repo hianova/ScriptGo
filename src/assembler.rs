@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+use covopt_macro::covopt_param;
+use std::io::Write;
 use crate::instruction::{Instruction, OpCode};
 use alloc::vec::Vec;
 
@@ -33,16 +36,16 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
             .and_then(|s| s.parse::<u16>().ok())
             .unwrap_or(0);
         let p3 = parts
-            .get(3)
+            .get(covopt_param!("M_39_17", 3))
             .and_then(|s| s.parse::<u16>().ok())
             .unwrap_or(0);
 
-        let u8_p1 = (p1 & 0xFF) as u8;
-        let u8_p2 = (p2 & 0xFF) as u8;
-        let u8_p3 = (p3 & 0xFF) as u8;
+        let u8_p1 = (p1 & covopt_param!("M_43_26", 255)) as u8;
+        let u8_p2 = (p2 & covopt_param!("M_44_26", 255)) as u8;
+        let u8_p3 = (p3 & covopt_param!("M_45_26", 255)) as u8;
 
-        let p2_low = (p2 & 0xFF) as u8;
-        let p2_high = ((p2 >> 8) & 0xFF) as u8;
+        let p2_low = (p2 & covopt_param!("M_47_27", 255)) as u8;
+        let p2_high = ((p2 >> covopt_param!("M_48_30", 8)) & covopt_param!("M_48_35", 255)) as u8;
 
         let inst = match mnemonic.as_str() {
             "HALT" => Instruction::new(OpCode::Halt as u8, 0, 0, 0),
@@ -67,8 +70,8 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
             "SHR" => Instruction::new(OpCode::Shr as u8, u8_p1, u8_p2, u8_p3),
 
             "JMP" => {
-                let j_low = (p1 & 0xFF) as u8;
-                let j_high = ((p1 >> 8) & 0xFF) as u8;
+                let j_low = (p1 & covopt_param!("M_73_34", 255)) as u8;
+                let j_high = ((p1 >> covopt_param!("M_74_37", 8)) & covopt_param!("M_74_42", 255)) as u8;
                 Instruction::new(OpCode::Jmp as u8, 0, j_low, j_high)
             }
             "JMPIFZERO" => Instruction::new(OpCode::JmpIfZero as u8, u8_p1, p2_low, p2_high),
@@ -79,8 +82,8 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
             "JMPIFFGT" => Instruction::new(OpCode::JmpIfFGt as u8, u8_p1, u8_p2, u8_p3),
 
             "CALL" => {
-                let c_low = (p1 & 0xFF) as u8;
-                let c_high = ((p1 >> 8) & 0xFF) as u8;
+                let c_low = (p1 & covopt_param!("M_85_34", 255)) as u8;
+                let c_high = ((p1 >> covopt_param!("M_86_37", 8)) & covopt_param!("M_86_42", 255)) as u8;
                 Instruction::new(OpCode::Call as u8, 0, c_low, c_high)
             }
             "RET" => Instruction::new(OpCode::Ret as u8, 0, 0, 0),
@@ -98,6 +101,7 @@ pub fn parse_asm(source: &str) -> Result<Vec<Instruction>, AsmError> {
             "NEURALCALL" => Instruction::new(OpCode::NeuralCall as u8, u8_p1, u8_p2, u8_p3),
             "HARDWARECALL" => Instruction::new(OpCode::HardwareCall as u8, u8_p1, u8_p2, u8_p3),
             "SYSCALL" => Instruction::new(OpCode::SysCall as u8, u8_p1, u8_p2, u8_p3),
+            "YIELD" => Instruction::new(OpCode::Yield as u8, 0, 0, 0),
             "EQ" => Instruction::new(OpCode::CmpEq as u8, u8_p1, u8_p2, u8_p3),
             "FLT" => Instruction::new(OpCode::CmpLt as u8, u8_p1, u8_p2, u8_p3),
             "JUMPNOT" => Instruction::new(OpCode::JmpIfZero as u8, u8_p1, p2_low, p2_high),
@@ -117,13 +121,14 @@ mod tests {
 
     #[test]
     fn test_valid_parse() {
-        let source = "LOADIMM 1 5\nADD 2 1 1\nPRINTREG 2\nHALT";
+        let source = "LOADIMM 1 5\nADD 2 1 1\nPRINTREG 2\nYIELD\nHALT";
         let result = parse_asm(source);
         assert!(result.is_ok());
         let code = result.unwrap();
-        assert_eq!(code.len(), 4);
+        assert_eq!(code.len(), 5);
         assert_eq!(opcode!(code[0]), OpCode::LoadImm as u8);
         assert_eq!(opcode!(code[2]), OpCode::PrintReg as u8);
+        assert_eq!(opcode!(code[3]), OpCode::Yield as u8);
     }
 
     #[test]
