@@ -1,0 +1,13 @@
+# SGL Sample Script: HardwareCall Integration Test
+# Exercises HttpGet, HttpPost, Socket I/O, Network Status
+
+# 1. NetworkStatus: HardwareCall R[20] = Status (cmd 6)
+HARDWARECALL 20 6 6
+
+# 2. HttpGet: HardwareCall R[21] = HttpGet(url_ptr) (cmd 1)
+HARDWARECALL 21 1 1
+
+# 3. SocketConnect: HardwareCall R[22] = SocketConnect(addr_ptr) (cmd 3)
+HARDWARECALL 22 3 3
+
+HALT

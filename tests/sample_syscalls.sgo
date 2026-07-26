@@ -1,0 +1,26 @@
+# SGL Sample Script: SysCall Integration Test
+# Exercises File I/O, Timestamp, Env, and String Operations
+
+# 1. GetTimestamp: SysCall R[10] = Timestamp (cmd 3)
+LOADIMM 1 3
+SYSCALL 10 1 0
+
+# 2. GetEnv: SysCall R[11] = GetEnv("ENV") (cmd 4)
+# Memory[0..3] = "ENV\0"
+# R[2] = 0 (pointer to key)
+SYSCALL 11 4 0
+
+# 3. StringConcat: SysCall R[12] = Concat(Str1_ptr, Str2_ptr) (cmd 5)
+# R[3] = Str1_ptr, R[4] = Str2_ptr
+SYSCALL 12 3 4
+
+# 4. StringLength: SysCall R[13] = Length(Str_ptr) (cmd 6)
+SYSCALL 13 6 3
+
+# 5. StringToUpper: SysCall R[14] = ToUpper(Str_ptr) (cmd 8)
+SYSCALL 14 8 3
+
+# 6. StringToLower: SysCall R[15] = ToLower(Str_ptr) (cmd 8)
+SYSCALL 15 9 3
+
+HALT

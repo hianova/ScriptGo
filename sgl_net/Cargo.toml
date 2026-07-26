@@ -1,0 +1,11 @@
+[package]
+name = "sgl-net"
+version = "2.0.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+sgl_macros = { path = "../sgl_macros" }
+script_go = { path = ".." }
