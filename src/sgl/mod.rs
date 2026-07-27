@@ -11,6 +11,7 @@ pub mod vm;
 
 pub mod io;
 pub mod net;
+pub mod math;
 
 pub use assembler::*;
 pub use host_handlers::*;
@@ -18,6 +19,7 @@ pub use instruction::*;
 pub use io::SglIoRegisterExt;
 pub use macros::*;
 pub use net::SglNetRegisterExt;
+pub use math::SglMathRegisterExt;
 pub use simd_ops::*;
 pub use ui_engine::*;
 pub use vm::*;

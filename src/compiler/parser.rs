@@ -338,6 +338,9 @@ impl Parser {
                         Expr::Call(v, args)
                     }
                 } else {
+                    if is_macro {
+                        return Err(self.error("Expected '(' after macro name, found invalid fuzzy syntax"));
+                    }
                     Expr::Identifier(v)
                 }
             }
